@@ -1,0 +1,40 @@
+{
+  "name": "ztak-core",
+  "version": "0.0.1",
+  "description": "A smart contract crypto token library",
+  "main": "src/index.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "bignumber.js": "^9.0.0",
+    "bitcoinjs-lib": "^5.1.8",
+    "bitcoinjs-message": "^2.1.0",
+    "ebnf": "^1.7.4",
+    "json-bigint": "^0.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.4"
+  },
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "devAsm": "nodemon test/asm_test.js",
+    "devEnvelope": "nodemon test/envelope_test.js",
+    "devMessaging": "nodemon test/messaging_test.js",
+    "genAddress": "node test/address_test.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "github.com/chiguireitor/ztak-core"
+  },
+  "keywords": [
+    "smart",
+    "contract",
+    "crypto",
+    "token",
+    "nft"
+  ],
+  "author": "John \"Chiguireitor\" Villar",
+  "license": "ISC"
+}
