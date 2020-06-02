@@ -92,7 +92,7 @@ const ops = {
   },
 
   NAMESPACE: {
-    comment: 'Defines a contract entrypoint',
+    comment: 'Defines a contract namespace',
     code: 0x03,
     validate: (elems) => forceArgs(elems, ['path']),
     relocateStrategy: 'noop',
@@ -101,7 +101,34 @@ const ops = {
       StringBuf(namespace)
     ]),
     unpackParams: ['string'],
-    run: (namespace, context) => context.namespace = namespace
+    run: async (namespace, context) => {
+      const existing = await context.store.get(context.namespace)
+      if (existing) {
+        const existingMeta = await context.store.get(context.namespace + '.meta')
+        if (!existingMeta.Address === context.callerAddress) {
+          throw new Error('contract namespace owned by a different address, not executing')
+        }
+      } else {
+        let spls = namespace.split('/')
+
+        if (spls.length > 1) {
+          let parentNamespace = spls.slice(0, -1).join('/')
+          if (parentNamespace.length > 0) {
+            let parentMeta = await context.store.get(parentNamespace + '.meta')
+
+            if (parentMeta) {
+              if (!(parentMeta.Address === context.callerAddress)) {
+                throw new Error('parent namespace not owned by the deployer address, not executing')
+              }
+            } else {
+              throw new Error('parent namespace doesn\'t exists, not deploying')
+            }
+          }
+        }
+      }
+
+      context.namespace = namespace
+    }
   },
 
   NPR: {
@@ -131,7 +158,7 @@ const ops = {
     comment: 'Makes the current execution fail if this op isn\'t executed by the owner of the contract',
     code: 0x05,
     validate: (elems) => [],
-    build: (label, num, context) => UInt8Buf(ops.OWNER.code),
+    build: (context) => UInt8Buf(ops.OWNER.code),
     unpackParams: [],
     run: (context) => {
       if (context.callerAddress !== context.currentLineOwner) {
@@ -143,11 +170,14 @@ const ops = {
   DEPLOY: {
     comment: 'Deploys the current contract, calls the apporpiate \'deploy\' entrypoint if the contract didn\'t exist',
     code: 0x06,
-    validate: (elems) => [],
+    validate: (elems) => forceArgs(elems, ['identifier']),
     relocateStrategy: 'noop',
-    build: (label, num, context) => UInt8Buf(ops.DEPLOY.code),
-    unpackParams: [],
-    run: async (context) => {
+    build: (label, context) => Buffer.concat([
+      UInt8Buf(ops.DEPLOY.code),
+      LineOfCodeBuf(context.findLabel(label))
+    ]),
+    unpackParams: ['uint16'],
+    run: async (deployLabelLine, context) => {
       const existing = await context.store.get(context.namespace)
       if (existing) {
         const existingMeta = await context.store.get(context.namespace + '.meta')
@@ -181,9 +211,13 @@ const ops = {
       await context.store.put(context.namespace + '.entrypoints', context.entrypoints)
       await context.store.put(context.namespace + '.meta', context.meta)
 
-      if ('deploy' in context.entrypoints) {
-        await ops.CALL.run(context.entrypoints.deploy, context)
+      for (let loc in context.entrypoints) {
+        if (context.entrypoints[loc] === deployLabelLine) {
+          throw new Error(`cannot deploy on the same label as entrypoint ${loc}`)
+        }
       }
+
+      await ops.CALL.run(deployLabelLine, context)
     }
   },
 
@@ -254,7 +288,7 @@ const ops = {
       }
 
       if (context.stack.length > 0) {
-        if (context.stack[context.stack.length - 1] !== 0) {
+        if (context.stack[context.stack.length - 1] !== 0n) {
           context.line = line - 1
         }
       } else {
@@ -279,7 +313,7 @@ const ops = {
       }
 
       if (context.stack.length > 0) {
-        if (context.stack[context.stack.length - 1] === 0) {
+        if (context.stack[context.stack.length - 1] === 0n) {
           context.line = line - 1
         }
       } else {
@@ -354,7 +388,7 @@ const ops = {
       }
 
       if (context.stack.length > 0) {
-        if (context.stack[context.stack.length - 1] < 0) {
+        if (context.stack[context.stack.length - 1] < 0n) {
           context.line = line - 1
         }
       } else {
@@ -379,7 +413,7 @@ const ops = {
       }
 
       if (context.stack.length > 0) {
-        if (context.stack[context.stack.length - 1] > 0) {
+        if (context.stack[context.stack.length - 1] > 0n) {
           context.line = line - 1
         }
       } else {
@@ -539,6 +573,8 @@ const ops = {
         context.stack.push(context.callerAddress)
       } else if (ident === 'owner') {
         context.stack.push(context.currentLineOwner)
+      } else if (ident === 'height') {
+        context.stack.push(context.currentHeight)
       } else {
         throw new Error(`invalid special value ${ident}`)
       }
@@ -564,11 +600,11 @@ const ops = {
     }
   },
 
-  POPZ: {
+  DROP: {
     comment: 'Pop top of the stack',
     code: 0x27,
     validate: (elems) => [],
-    build: (identifier) => UInt8Buf(ops.POPZ.code),
+    build: (identifier) => UInt8Buf(ops.DROP.code),
     unpackParams: [],
     run: (context) => {
       context.stack.pop()
@@ -598,6 +634,35 @@ const ops = {
       }
       metaInfo[metaIdent] = newval
       await context.store.put(metaName, metaInfo)
+    }
+  },
+
+  SINK: {
+    comment: 'Swaps the top 2 elements of the stack, removes the resulting top',
+    code: 0x29,
+    validate: (elems) => [],
+    build: (ident) => UInt8Buf(ops.SINK.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let first = context.stack[context.stack.length - 1]
+        context.stack.pop()
+        context.stack[context.stack.length - 1] = first
+      } else {
+        throw new Error(`invalid stack size ${context.stack.length}`)
+      }
+    }
+  },
+
+  DROP2: {
+    comment: 'Pop top of the stack two times',
+    code: 0x2A,
+    validate: (elems) => [],
+    build: (identifier) => UInt8Buf(ops.DROP2.code),
+    unpackParams: [],
+    run: (context) => {
+      context.stack.pop()
+      context.stack.pop()
     }
   },
 
@@ -841,6 +906,16 @@ function _unpackCodes() {
 }
 _unpackCodes()
 
+function help() {
+  const opEntries = Object.entries(ops)
+  for (let i=0; i < opEntries.length; i++) {
+    const [key, value] = opEntries[i]
+
+    console.log(key, '\t-\t', value.comment, '-', value.unpackParams)
+  }
+  console.log(`Total opcodes: ${opEntries.length}`)
+}
+
 module.exports = {
-  ops, codeToOp
+  ops, codeToOp, help
 }

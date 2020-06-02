@@ -1,28 +1,44 @@
-META "Name" "Test script number 1"
+META "Name" "Dabomb Token"
 META "Version" "0.0.1" # Test comment
 META "Author" "ZyJFG9AmGqrDLskgHrNMLNUB9n3yi9Vx2C"
-
+META "Info" '{"icon": "https://ztak.io/icons/dabomb.png", "website": "https://ztak.io", "decimals": 2}'
 NAMESPACE /ztak/dabomb
 
-ENTRY "deploy" ondeploy
 ENTRY "send" send
 ENTRY "transfer" transfer
+ENTRY "coinbase" coinbase
 
-DEPLOY
+DEPLOY firstdeploy
 END
 
-:ondeploy
+:firstdeploy
   OWNER
   PUSHV caller
   PUSHI 1000
   PUT
   LOG "Deployed contract"
-  END
+  RET 0
 
 :transfer
   OWNER
   POPM "Address"
   END
+
+:coinbase
+  PUSHV height
+  JNEQ coinbase_invalid
+  DROP2
+  GETI 0
+  PUSHI 100
+  PLUS
+  SINK
+  SINK
+  PUT
+  PUSHI 1
+  RET 1
+:coinbase_invalid
+  PUSHI 0
+  RET 1
 
 :send
   POP memo
@@ -37,14 +53,11 @@ END
   PUSHV caller
   SWAP
   PUT
-  POPZ
-  POPZ
+  DROP2
   PUSHR destination
   GETI 0 # Gets current destination balance
-  SWAP
-  POPZ # Removes the destination address
-  SWAP
-  POPZ
+  SINK # Removes the destination address
+  SINK
   PLUS
   PUSHR destination
   SWAP

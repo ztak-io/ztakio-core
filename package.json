@@ -1,5 +1,5 @@
 {
-  "name": "ztak-core",
+  "name": "ztakio-core",
   "version": "0.0.1",
   "description": "A smart contract crypto token library",
   "main": "src/index.js",
@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "github.com/chiguireitor/ztak-core"
+    "url": "github.com/ztak-io/ztakio-core"
   },
   "keywords": [
     "smart",
