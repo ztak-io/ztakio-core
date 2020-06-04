@@ -1,4 +1,5 @@
 const { crypto } = require('bitcoinjs-lib')
+const bitcoinMessage = require('bitcoinjs-message')
 const {UInt8Buf, StringBuf, LineOfCodeBuf, Int64Buf, UInt64Buf, UInt16Buf} = require('./buffers')
 
 function forceArgs(list, types) {
@@ -241,7 +242,7 @@ const ops = {
       } else if (!meta) {
         throw new Error(`contract metainformation on namespace ${path} not found`)
       } else {
-        context.appendProgram(code, entrypoints, meta)
+        context.appendProgram(path, code, entrypoints, meta)
       }
     }
   },
@@ -489,6 +490,70 @@ const ops = {
     }
   },
 
+  JNIL: {
+    comment: 'Jumps to a given label if the top value of the stack is null or undefined',
+    code: 0x1A,
+    validate: (elems) => forceArgs(elems, ['identifier']),
+    relocateStrategy: 'move',
+    build: (label, context) => Buffer.concat([
+      UInt8Buf(ops.JNIL.code),
+      LineOfCodeBuf(context.findLabel(label))
+    ]),
+    unpackParams: ['uint16'],
+    run: (line, context) => {
+      if (line <= context.line) {
+        throw new Error(`cannot call line ${line} from line ${context.line}`)
+      }
+
+      if (context.stack.length > 0) {
+        let val = context.stack[context.stack.length - 1]
+        if (val === null || typeof(val) === 'undefined') {
+          context.line = line - 1
+        }
+      } else {
+        throw new Error(`invalid empty stack on JNIL operator`)
+      }
+    }
+  },
+
+  ITER: {
+    comment: 'Iterates calls to the given label pushing the index into the stack. Stack top msut be [..., start, end, step, 0]. Step > 0. Called label must return -1 or 1 to break iteration, 0 to continue to the next value.',
+    code: 0x1B,
+    validate: (elems) => forceArgs(elems, ['identifier']),
+    relocateStrategy: 'move',
+    build: (label, context) => Buffer.concat([
+      UInt8Buf(ops.ITER.code),
+      LineOfCodeBuf(context.findLabel(label))
+    ]),
+    unpackParams: ['uint16'],
+    run: async (line, context) => {
+      if (line <= context.line) {
+        throw new Error(`cannot iterate line ${line} from line ${context.line}`)
+      }
+
+      if (context.stack.length > 3) {
+        if (context.stack[context.stack.length - 2] > 0) {
+          let r = context.stack.pop()
+          let v = context.stack[context.stack.length - 3]
+
+          context.stack[context.stack.length - 3] += context.stack[context.stack.length - 1] // Mutate stack for next iteration
+
+          if (r === 0n && v <= context.stack[context.stack.length - 2]) {
+            context.line = context.line - 1 // On return, repeat iteration with changed stack
+            await ops.CALL.run(line, context)
+            context.stack.push(v)
+          } else {
+            context.stack.push(r)
+          }
+        } else {
+          throw new Error(`ITER step must be positive non-zero integer`)
+        }
+      } else {
+        throw new Error(`invalid stack size (${context.stack.length}) on ITER operator (must be at least 4)`)
+      }
+    }
+  },
+
   POP: {
     comment: 'Pop value from the stack to a given register on the context',
     code: 0x20,
@@ -649,7 +714,7 @@ const ops = {
         context.stack.pop()
         context.stack[context.stack.length - 1] = first
       } else {
-        throw new Error(`invalid stack size ${context.stack.length}`)
+        throw new Error(`invalid stack size ${context.stack.length} on SINK`)
       }
     }
   },
@@ -663,6 +728,34 @@ const ops = {
     run: (context) => {
       context.stack.pop()
       context.stack.pop()
+    }
+  },
+
+  PUSHPR: {
+    comment: 'Push callee register value into the stack',
+    code: 0x2B,
+    validate: (elems) => forceArgs(elems, ['identifier']),
+    build: (ident) => Buffer.concat([
+      UInt8Buf(ops.PUSHPR.code),
+      StringBuf(ident)
+    ]),
+    unpackParams: ['string'],
+    run: (ident, context) => {
+      if (context.stack.length > 0) {
+        const callee = context.stack[0]
+
+        if (typeof(callee) === 'object') {
+          if (ident in callee.registers)  {
+            context.stack.push(callee.registers[ident])
+          } else {
+            throw new Error(`invalid callee register ${ident} on PUSHPR`)
+          }
+        } else {
+          throw new Error(`no callee stack on PUSHPR`)
+        }
+      } else {
+        throw new Error(`invalid stack size ${context.stack.length} on PUSHPR`)
+      }
     }
   },
 
@@ -828,6 +921,25 @@ const ops = {
     }
   },
 
+  CHECKSIG: {
+    comment: 'Checks that the signature on top of the stack coincides with the next stack element "message hash" from the next stack element "address". Pushes 1 on success 0 on error.',
+    code: 0x62,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.CHECKSIG.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 2) {
+        const signature = context.stack.pop()
+        const message = context.stack.pop()
+        const address = context.stack.pop()
+        const sigResult = bitcoinMessage.verify(message, address, signature)?1n:0n
+        context.stack.push(sigResult)
+      } else {
+        throw new Error(`invalid stack size (${context.stack.length}) on CHECKSIG op (must be 3)`)
+      }
+    }
+  },
+
   GET: {
     comment: 'Gets a value from the store with its key being the top value of the stack, pushes the value onto the stack',
     code: 0x70,
@@ -835,10 +947,21 @@ const ops = {
     build: (context) => UInt8Buf(ops.GET.code),
     unpackParams: [],
     run: async (context) => {
-      if (context.stack.length > 0) {
-        await context.stack.push(context.store.get(context.namespace + '/' + context.stack[context.stack.length - 1]))
+      let currentNamespace = context.namespace
+      if (context.currentLineContext) {
+        currentNamespace = context.currentLineContext
+      }
+
+      if (currentNamespace) {
+        if (context.stack.length > 0) {
+          let namespace = currentNamespace + '/'
+
+          await context.stack.push(context.store.get(namespace + context.stack[context.stack.length - 1]))
+        } else {
+          throw new Error(`invalid stack (size ${context.stack.length}) on GET operator`)
+        }
       } else {
-        throw new Error(`invalid stack (size ${context.stack.length}) on GET operator`)
+        throw new Error(`cannot GET on an undefined namespace`)
       }
     }
   },
@@ -850,10 +973,25 @@ const ops = {
     build: (context) => UInt8Buf(ops.PUT.code),
     unpackParams: [],
     run: async (context) => {
-      if (context.stack.length > 1) {
-        await context.store.put(context.namespace + '/' + context.stack[context.stack.length - 2], context.stack[context.stack.length - 1])
+      let currentNamespace = context.namespace
+      if (context.currentLineContext) {
+        currentNamespace = context.currentLineContext
+      }
+
+      if (currentNamespace) {
+        if (context.stack.length > 1) {
+          let namespace = currentNamespace + '/'
+          /*if (context.currentLineOwner !== context.callerAddress) {
+            namespace += context.callerAddress + '/'
+          }*/
+
+          console.log('PUT:', namespace + context.stack[context.stack.length - 2], '=', context.stack[context.stack.length - 1])
+          await context.store.put(namespace + context.stack[context.stack.length - 2], context.stack[context.stack.length - 1])
+        } else {
+          throw new Error(`invalid stack (size ${context.stack.length}) on PUT operator`)
+        }
       } else {
-        throw new Error(`invalid stack (size ${context.stack.length}) on PUT operator`)
+        throw new Error(`cannot PUT on an undefined namespace`)
       }
     }
   },
@@ -868,16 +1006,28 @@ const ops = {
     ]),
     unpackParams: ['integer'],
     run: async (def, context) => {
-      if (context.stack.length > 0) {
-        let val = await context.store.get(context.namespace + '/' + context.stack[context.stack.length - 1])
+      let currentNamespace = context.namespace
+      if (context.currentLineContext) {
+        currentNamespace = context.currentLineContext
+      }
 
-        if (typeof(val) === 'undefined') {
-          val = def
+      if (currentNamespace) {
+        if (context.stack.length > 0) {
+          let namespace = currentNamespace + '/'
+          let val = await context.store.get(namespace + context.stack[context.stack.length - 1])
+
+          if (typeof(val) === 'undefined') {
+            val = def
+          }
+
+          console.log('GETI:', namespace + context.stack[context.stack.length - 1], '=', val)
+
+          context.stack.push(val)
+        } else {
+          throw new Error(`invalid stack (size ${context.stack.length}) on GET operator`)
         }
-
-        context.stack.push(val)
       } else {
-        throw new Error(`invalid stack (size ${context.stack.length}) on GET operator`)
+        throw new Error(`cannot GETI on an undefined namespace`)
       }
     }
   },
@@ -914,6 +1064,12 @@ function help() {
     console.log(key, '\t-\t', value.comment, '-', value.unpackParams)
   }
   console.log(`Total opcodes: ${opEntries.length}`)
+}
+
+if (require.main === module) {
+  if (process.argv.indexOf('help') >= 0) {
+    help()
+  }
 }
 
 module.exports = {

@@ -184,8 +184,12 @@ function createContext(utils, store, callerAddress) {
       ob.registers = {}
     },
 
-    appendProgram: (buf, entrypoints, meta) => {
-      let unpacked = unpack(buf)
+    appendProgram: (namespace, buf, entrypoints, meta) => {
+      let unpacked = unpack(buf).map(x => {
+        x.overrideNamespace = namespace
+        return x
+      })
+
       if ('Address' in meta) {
         unpacked = unpacked.map(x => {
           x.owner = meta.Address
@@ -241,7 +245,9 @@ async function execute(context, entrypoint) {
       const op = ops[currentLine.opName]
 
       context.currentLineOwner = currentLine.owner || context.callerAddress
+      context.currentLineContext = currentLine.overrideNamespace || context.namespace
       //console.log('--->', context.line, '/', context.program.length, context.stack, currentLine.opName, ...currentLine.params)
+      console.log('--->', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
       await op.run(...currentLine.params, context)
       //console.log('<---', context.stack,'\n')
 
@@ -251,7 +257,7 @@ async function execute(context, entrypoint) {
     context.store.commit()
   } catch (e) {
     context.store.rollback()
-    throw e
+    throw new Error(`Line ${context.line} ` + e.message)
   }
 }
 

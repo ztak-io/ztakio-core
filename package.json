@@ -21,7 +21,9 @@
     "devAsm": "nodemon test/asm_test.js",
     "devEnvelope": "nodemon test/envelope_test.js",
     "devMessaging": "nodemon test/messaging_test.js",
+    "devBlock": "nodemon test/block_test.js",
     "genAddress": "node test/address_test.js",
+    "help": "node src/ops.js help",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
