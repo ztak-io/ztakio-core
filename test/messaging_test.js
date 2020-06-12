@@ -26,17 +26,15 @@ const msg = ztak.openEnvelope(vn)*/
 
 async function send(ec, destAddress, amount) {
   //const { address } = bitcoin.payments.p2pkh({ pubkey: ec.publicKey, network: ztak.networks.mainnet })
-  console.log(`Sending from ${getAddress(ec)} to ${destAddress} amnt ${amount}`)
-  const vn = ztak.buildEnvelope(ec, { exec: asm.compile(util.format(codeCall, destAddress, amount)).toString('hex') })
-  const vntext = JSON.stringify(vn)
-
-  return vntext
+  const vn = ztak.buildEnvelope(ec, asm.compile(util.format(codeCall, destAddress, amount)))
+  console.log(`Sending from ${getAddress(ec)} to ${destAddress} amnt ${amount}, byte length ${vn.length}`)
+  return vn.toString('hex')
 }
 
 async function parseSend(vn) {
-  const msg = ztak.openEnvelope(JSON.parse(vn))
+  const msg = ztak.openEnvelope(Buffer.from(vn, 'hex'))
 
-  const prog = Buffer.from(msg.exec, 'hex')
+  const prog = Buffer.from(msg.data, 'hex')
   const context = asm.createContext(ztak.utils(ztak.networks.mainnet), store, msg.from)
   try {
     context.loadProgram(prog)

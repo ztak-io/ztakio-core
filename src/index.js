@@ -1,5 +1,6 @@
 const bitcoin = require('bitcoinjs-lib')
 const bitcoinMessage = require('bitcoinjs-message')
+const bs58check = require('bs58check')
 
 const networks = {
   mainnet: {
@@ -15,43 +16,108 @@ const networks = {
   }
 }
 
-function plainSortedEntries(data) {
-  return Object.entries(data)
-    .sort((a,b) => a[0].localeCompare(b[0]))
-    .map(([key, value]) => key + ':' + value)
-    .join('\n')
+function uint8buf(v) {
+  let b = Buffer.alloc(1)
+  b.writeUInt8(v)
+  return b
+}
+
+function uint32lebuf(v) {
+  let b = Buffer.alloc(4)
+  b.writeUInt32LE(v)
+  return b
+}
+
+function varlenBuf(b) {
+  let l
+  if (b.length < 254) {
+    l = Buffer.alloc(1)
+    l.writeUInt8(b.length)
+  } else {
+    l = Buffer.alloc(3)
+    l.writeUInt8(255)
+    l.writeUInt16LE(b.length, 1)
+  }
+
+  return Buffer.concat([l, b])
 }
 
 function buildEnvelope(fromKp, data, network) {
   if (!network) network = networks.mainnet
 
   const { address } = bitcoin.payments.p2pkh({ pubkey: fromKp.publicKey, network })
-  const nonce = Date.now()
-  const signatureOb = {
-    from: address, nonce,
-    ...data
-  }
-  const msg = plainSortedEntries(signatureOb)
+  const nonce = Date.now() & 0x7FFFFFFF
+  const signatureBuf = Buffer.concat([
+    varlenBuf(bs58check.decode(address)),
+    uint32lebuf(nonce),
+    varlenBuf(data)
+  ])
+  const msg = signatureBuf.toString('hex')
+  const sig = bitcoinMessage.sign(msg, fromKp.privateKey, fromKp.compressed)
 
-  let envelope = {
-    from: address,
-    sig: bitcoinMessage.sign(msg, fromKp.privateKey, fromKp.compressed).toString('base64'),
-    nonce, data
-  }
+  let envelope = Buffer.concat([
+    uint8buf((fromKp.compressed?128:0) | 1),
+    varlenBuf(sig),
+    signatureBuf,
+  ])
 
   return envelope
 }
 
+function Cursor(b) {
+  let p = 0
+  return {
+    readUInt8: () => {
+      return b.readUInt8(p++)
+    },
+
+    readUInt32LE: () => {
+      let r = b.readUInt32LE(p)
+      p += 4
+      return r
+    },
+
+    readVarlenBuf: () => {
+      let l = b.readUInt8(p++)
+      if (l === 255) {
+        l = b.readUInt16LE(p)
+        p += 2
+      }
+
+      let ret = b.slice(p, p + l)
+      p += l
+      return ret
+    },
+
+    remainingSlice: () => {
+      return b.slice(p)
+    }
+  }
+}
+
 function openEnvelope(vn) {
-  const { from, sig, nonce, data } = vn
+  const reader = Cursor(vn)
 
-  const signatureOb = { from, nonce, ...data }
-  const msg = plainSortedEntries(signatureOb)
+  const envelopeType = reader.readUInt8()
+  const compressed = (envelopeType & 0x80) !== 0
+  const version = envelopeType & 0x7F
 
-  if (bitcoinMessage.verify(msg, from, sig)) {
-    return signatureOb
+  if (version === 1) {
+    const sig = reader.readVarlenBuf()
+
+    const sigBuf = reader.remainingSlice()
+
+    const address = bs58check.encode(reader.readVarlenBuf())
+    const nonce = reader.readUInt32LE()
+    const data = reader.readVarlenBuf()
+
+    if (bitcoinMessage.verify(sigBuf.toString('hex'), address, sig)) {
+      return {from: address, data}
+    } else {
+      throw new Error('invalid signature')
+    }
   } else {
-    throw new Error('invalid signature')
+    throw new Error(`envelope version ${version} not implemented`)
   }
 }
 

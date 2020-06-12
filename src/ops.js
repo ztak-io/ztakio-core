@@ -985,7 +985,7 @@ const ops = {
             namespace += context.callerAddress + '/'
           }*/
 
-          console.log('PUT:', namespace + context.stack[context.stack.length - 2], '=', context.stack[context.stack.length - 1])
+          //console.log('PUT:', namespace + context.stack[context.stack.length - 2], '=', context.stack[context.stack.length - 1])
           await context.store.put(namespace + context.stack[context.stack.length - 2], context.stack[context.stack.length - 1])
         } else {
           throw new Error(`invalid stack (size ${context.stack.length}) on PUT operator`)
@@ -1020,7 +1020,7 @@ const ops = {
             val = def
           }
 
-          console.log('GETI:', namespace + context.stack[context.stack.length - 1], '=', val)
+          //console.log('GETI:', namespace + context.stack[context.stack.length - 1], '=', val)
 
           context.stack.push(val)
         } else {
