@@ -233,7 +233,7 @@ function createContext(utils, store, callerAddress) {
 
 
 async function execute(context, entrypoint) {
-  context.store.start()
+  await context.store.start()
   try {
     while (context.executing) {
       if (context.line < 0 || context.line >= context.program.length) {
@@ -246,6 +246,7 @@ async function execute(context, entrypoint) {
 
       context.currentLineOwner = currentLine.owner || context.callerAddress
       context.currentLineContext = currentLine.overrideNamespace || context.namespace
+      console.log('--->', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
       //console.log('--->', context.line, '/', context.program.length, context.stack, currentLine.opName, ...currentLine.params)
       //console.log('--->', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
       await op.run(...currentLine.params, context)
@@ -254,9 +255,10 @@ async function execute(context, entrypoint) {
       context.line++
     }
 
-    context.store.commit()
+    await context.store.commit()
   } catch (e) {
-    context.store.rollback()
+    console.log(e)
+    await context.store.rollback()
     throw new Error(`Line ${context.line} ` + e.message)
   }
 }

@@ -206,7 +206,7 @@ const ops = {
         }
       }
 
-      context.meta.Address = context.callerAddress // Force the owner to be the deployer, regardless of whatever the cotnract says
+      context.meta.Address = context.callerAddress // Force the owner to be the deployer, regardless of whatever the contract says
 
       await context.store.put(context.namespace, context.code)
       await context.store.put(context.namespace + '.entrypoints', context.entrypoints)

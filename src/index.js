@@ -2,7 +2,7 @@ const bitcoin = require('bitcoinjs-lib')
 const bitcoinMessage = require('bitcoinjs-message')
 const bs58check = require('bs58check')
 
-const networks = {
+let networks = {
   mainnet: {
     messagePrefix: '\x18Ztak Signed Message:\n',
     bech32: 'zt',
@@ -133,11 +133,31 @@ function addressVerifier(network) {
   }
 }
 
-module.exports = {
-  networks, buildEnvelope, openEnvelope,
-  utils: (network) => {
-    return {
-      addressVerifier: addressVerifier(network)
-    }
+function utils(network) {
+  return {
+    addressVerifier: addressVerifier(network)
   }
+}
+
+if ((typeof(process) !== 'undefined') && process.mainModule.path) {
+  let fs = require('fs')
+  try {
+    let path = require('path')
+    let fname = process.mainModule.path + path.sep + 'ztak_overrides.json'
+
+    fs.accessSync(fname, fs.constants.R_OK)
+    let overrides = JSON.parse(fs.readFileSync(fname, 'utf8'))
+
+    if ('networks' in overrides) {
+      networks = overrides.networks
+    }
+
+  } catch (e) {
+    // ignore
+  }
+}
+
+module.exports = {
+  utils, networks, buildEnvelope, openEnvelope,
+  asm: require('./asm')
 }
