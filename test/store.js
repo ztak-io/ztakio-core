@@ -48,6 +48,19 @@ const store = {
   },
   rollback: () => {
     store.newValues = null
+  },
+
+  iterator: function* (opts) {
+    for (let x in store.values) {
+      let haveToYield = false
+      if ('gt' in opts && x.startsWith(opts.gt) && opts.gt < x) {
+        haveToYield = true
+      }
+
+      if (haveToYield) {
+        yield {key: x, value: store.get(x)}
+      }
+    }
   }
 }
 

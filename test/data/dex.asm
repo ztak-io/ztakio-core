@@ -14,7 +14,7 @@ END
   OWNER
   RET 0
 
-:ask
+:bid
   REQUIRE {{{tokenA}}}
   REQUIRE {{{tokenB}}}
   POP get
@@ -35,16 +35,35 @@ END
   PUSHR get
   PUT
 
-  #PUSHR orderid
-  #PUSHS ".owner"
-  #CONCAT
-  #PUSHV caller
-  #PUT
+  PUSHS "(.+){{{tokenA}}}"
+  ENUM bid_enum
 
   PUSHI 1
   RET 1
 
-:bid
+:bid_enum
+  POP getamnt
+  POP orderid
+  PUSHS "DEX {{{tokenA}}}{{{tokenB}}} Order: "
+  PUSHR orderid
+  CONCAT
+  LOGP
+  PUSHR orderid
+  ECALL {{{tokenA}}}:balance
+  JZ end_bid_enum # If there's no escrowed balance, skip
+  PUSHS "Give value: "
+  SWAP
+  CONCAT
+  LOGP
+  PUSHS "Get value: "
+  PUSHR getamnt
+  CONCAT
+:end_bid_enum
+  LOGP
+  PUSHI 1
+  RET 1
+
+:ask
   REQUIRE {{{tokenA}}}
   REQUIRE {{{tokenB}}}
   POP get
@@ -64,12 +83,6 @@ END
   CONCAT
   PUSHR get
   PUT
-
-  #PUSHR orderid
-  #PUSHS ".owner"
-  #CONCAT
-  #PUSHV caller
-  #PUT
 
   PUSHI 1
   RET 1

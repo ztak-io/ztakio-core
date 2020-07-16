@@ -438,13 +438,30 @@ const ops = {
     ]),
     unpackParams: ['uint8'],
     run: (num, context) => {
+      let shouldGoBackToPreviousContext = true
       if (context.stack.length > num) {
-        const previousContext = context.stack.shift()
+        if (context.pendingBranchEnum) {
+          if (context.pendingBranchEnum.params.length > 0) {
+            context.pendingBranchEnum.returns = context.pendingBranchEnum.returns.concat(context.stack.slice(-num))
+            context.stack = context.stack.slice(0, context.stack.length - num).concat(context.pendingBranchEnum.params.shift())
+            context.line = context.pendingBranchEnum.line
+            shouldGoBackToPreviousContext = false
+          } else {
+            context.pendingBranchEnum.returns = context.pendingBranchEnum.returns.concat(context.stack.slice(-num))
+            let returns = context.pendingBranchEnum.returns
+            context.stack = context.stack.slice(0, context.stack.length - num).concat(returns).concat([returns.length])
+            context.pendingBranchEnum = null
+          }
+        }
 
-        context.line = previousContext.line
-        context.registers = previousContext.registers
-        context.stack = previousContext.stack.concat(context.stack.slice(-num))
-        context.callingNamespace = previousContext.callingNamespace
+        if (shouldGoBackToPreviousContext) {
+          const previousContext = context.stack.shift()
+
+          context.line = previousContext.line
+          context.registers = previousContext.registers
+          context.stack = previousContext.stack.concat(context.stack.slice(-num))
+          context.callingNamespace = previousContext.callingNamespace
+        }
       } else {
         throw new Error(`invalid empty or less than ${num} stack on RET operator`)
       }
@@ -525,7 +542,7 @@ const ops = {
   },
 
   ITER: {
-    comment: 'Iterates calls to the given label pushing the index into the stack. Stack top msut be [..., start, end, step, 0]. Step > 0. Called label must return -1 or 1 to break iteration, 0 to continue to the next value.',
+    comment: 'Iterates calls to the given label pushing the index into the stack. Stack top must be [..., start, end, step, 0]. Step > 0. Called label must return -1 or 1 to break iteration, 0 to continue to the next value.',
     code: 0x1B,
     validate: (elems) => forceArgs(elems, ['identifier']),
     relocateStrategy: 'move',
@@ -558,6 +575,58 @@ const ops = {
         }
       } else {
         throw new Error(`invalid stack size (${context.stack.length}) on ITER operator (must be at least 4)`)
+      }
+    }
+  },
+
+  ENUM: {
+    comment: 'Enumerates values in a namespace. Regular expression is popped from the stack. Matching groups are pushed into each call to the label passed as parameter.',
+    code: 0x1C,
+    validate: (elems) => forceArgs(elems, ['identifier']),
+    relocateStrategy: 'move',
+    build: (label, context) => Buffer.concat([
+      UInt8Buf(ops.ENUM.code),
+      LineOfCodeBuf(context.findLabel(label))
+    ]),
+    unpackParams: ['uint16'],
+    run: async (line, context) => {
+      if (line <= context.line) {
+        throw new Error(`cannot iterate line ${line} from line ${context.line}`)
+      }
+
+      if (context.stack.length > 0) {
+        let keyRoot = context.currentLineContext + '/'
+        let re = new RegExp(keyRoot + context.stack.pop())
+        let gen = context.store.iterator({ gt: keyRoot })
+
+        let result = gen.next()
+        let results = []
+        while (!result.done) {
+          const {key, value} = result.value
+          let matches = re.exec(key)
+          if (matches) {
+            results.push(matches.slice(1).concat([value]))
+          }
+          result = gen.next()
+        }
+        if (results.length > 0) {
+          let firstResult = results.shift()
+          context.pendingBranchEnum = { line, params: results, returns: [] }
+          const savedContext = {
+            line: context.line,
+            registers: context.registers,
+            stack: context.stack.map(x => x),
+            callingNamespace: context.callingNamespace
+          }
+          context.callingNamespace = context.currentLineContext
+          context.stack = [savedContext].concat(context.stack).concat(firstResult)
+          context.registers = {}
+          context.line = line
+        } else {
+          context.stack.push(1n)
+        }
+      } else {
+        throw new Error(`invalid stack size (${context.stack.length}) on ENUM operator (must be at least 1)`)
       }
     }
   },
@@ -1091,6 +1160,18 @@ const ops = {
     }
   },
 
+  LOGP: {
+    comment: 'Prunable pop log',
+    code: 0xFD,
+    validate: (elems) => forceArgs(elems),
+    build: () => Buffer.concat([
+      UInt8Buf(ops.LOGP.code)
+    ]),
+    unpackParams: [],
+    run: (context) => {
+      console.log('LOG:', context.stack.pop())
+    }
+  },
   LOG: {
     comment: 'Prunable log',
     code: 0xFE,

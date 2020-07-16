@@ -127,8 +127,10 @@ async function test() {
   await send(tokenBPath, contractOwner, recipient2, 40, '')
 
   await dex(contractOwner, tokenBPath, tokenPath)
-  await dexAskOrder(recipient1, 2, 1, 'asd')
-  await dexBidOrder(recipient2, 1, 2, 'qwe')
+  await dexAskOrder(recipient2, 2, 1, 'asd')
+  await dexAskOrder(recipient2, 3, 2, 'afd')
+  await dexBidOrder(recipient1, 1, 2, 'qwe')
+  await dexBidOrder(recipient1, 2, 3, 'hee')
 
   //store.verbose = true
   //await testDex(contractOwner, 2)

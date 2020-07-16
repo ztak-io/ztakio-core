@@ -161,6 +161,7 @@ function createContext(utils, store, callerAddress, currentTxid) {
     stack: null,
     executing: false,
     callingNamespace: null,
+    pendingBranchEnum: null,
     assertExists: {},
     callerAddress, store, utils, currentTxid,
 

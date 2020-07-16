@@ -16,6 +16,7 @@ ENTRY "issuance" issuance
 ENTRY "send" send
 ENTRY "sendfrom" sendfrom # sends from an escrowed cache
 ENTRY "escrow" escrow # escrows funds to a specially owned cache
+ENTRY "balance" balance # returns balance of the stack top
 
 DEPLOY deploy
 END
@@ -118,4 +119,8 @@ END
   RET 1
 :sendfrom_invalid_amount
   PUSHI 0
+  RET 1
+
+:balance
+  GETI 0
   RET 1
