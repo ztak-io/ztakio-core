@@ -34,10 +34,12 @@ function buildLine(elem, context) {
   }
 }
 
-function compile(code) {
+function compile(code, debug) {
   const parser = new Grammars.W3C.Parser(grammar)
   const ast = parser.getAST(code)
-
+  if (debug) {
+    console.log(ast)
+  }
   let builds = []
   let labels = {}
 
@@ -148,7 +150,7 @@ function unpack(buf) {
   return lines
 }
 
-function createContext(utils, store, callerAddress) {
+function createContext(utils, store, callerAddress, currentTxid) {
   let ob = {
     program: null,
     code: null,
@@ -158,8 +160,9 @@ function createContext(utils, store, callerAddress) {
     registers: null,
     stack: null,
     executing: false,
+    callingNamespace: null,
     assertExists: {},
-    callerAddress, store, utils,
+    callerAddress, store, utils, currentTxid,
 
     findLabel: (name) => {
       if (name in ob.entrypoints) {
@@ -216,14 +219,13 @@ function createContext(utils, store, callerAddress) {
         return line
       })
 
-      /*console.trace('should repack \'unpacked\' instead of using buf')
-      ob.code = Buffer.concat([ob.code, buf])*/
       ob.program = ob.program.concat(unpacked)
       for (let entry in entrypoints) {
-        if (entry in ob.entrypoints) {
+        let relocEntry = namespace + ':' + entry
+        if (relocEntry in ob.entrypoints) {
           throw new Error(`tried to require a contract with a duplicate label ${entry}`)
         } else {
-          ob.entrypoints[entry] = entrypoints[entry] + move
+          ob.entrypoints[relocEntry] = entrypoints[entry] + move
         }
       }
     }
@@ -246,7 +248,7 @@ async function execute(context, entrypoint) {
 
       context.currentLineOwner = currentLine.owner || context.callerAddress
       context.currentLineContext = currentLine.overrideNamespace || context.namespace
-      console.log('--->', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
+      //console.log('--->', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
       //console.log('--->', context.line, '/', context.program.length, context.stack, currentLine.opName, ...currentLine.params)
       //console.log('--->', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
       await op.run(...currentLine.params, context)

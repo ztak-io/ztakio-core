@@ -3,6 +3,9 @@ const store = {
   newValues: null,
 
   get: (key) => {
+    if (store.verbose) {
+      console.log('GET:', key, store.values)
+    }
     let r = store.values[key]
 
     if (typeof(r) === 'object') {

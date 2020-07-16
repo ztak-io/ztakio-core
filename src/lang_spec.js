@@ -3,13 +3,14 @@ CODE ::= ((comment | label | op)? (WS comment)? NL)*
 
 comment ::= "#" WS? alphanumeric
 label ::= ":" alphanumeric
-op ::= WS? identifier (WS (path | identifier | number | string))*
+op ::= WS? identifier (WS (pathext | path | identifier | number | string))*
 
 identifier ::= IDENTLETTER (IDENTLETTER | NUMBER)*
 LETTER ::= ([#x41-#x5a] | [#x61-#x7a])
 IDENTLETTER ::= ("_" | [#x41-#x5a] | [#x61-#x7a])
 
 path ::= (SLASH (LETTER | NUMBER)+)+
+pathext ::= path label
 SLASH ::= #x2F
 
 NUMBER ::= [0-9]

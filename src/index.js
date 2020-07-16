@@ -28,6 +28,12 @@ function uint32lebuf(v) {
   return b
 }
 
+function uint64lebuf(v) {
+  let b = Buffer.alloc(8)
+  b.writeBigUint64LE(v)
+  return b
+}
+
 function varlenBuf(b) {
   let l
   if (b.length < 254) {
@@ -112,7 +118,7 @@ function openEnvelope(vn) {
     const data = reader.readVarlenBuf()
 
     if (bitcoinMessage.verify(sigBuf.toString('hex'), address, sig)) {
-      return {from: address, data}
+      return {from: address, data, nonce}
     } else {
       throw new Error('invalid signature')
     }

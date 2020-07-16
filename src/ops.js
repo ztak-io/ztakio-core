@@ -1,5 +1,6 @@
 const { crypto } = require('bitcoinjs-lib')
 const bitcoinMessage = require('bitcoinjs-message')
+const bs58 = require('bs58')
 const {UInt8Buf, StringBuf, LineOfCodeBuf, Int64Buf, UInt64Buf, UInt16Buf} = require('./buffers')
 
 function forceArgs(list, types) {
@@ -208,8 +209,12 @@ const ops = {
 
       context.meta.Address = context.callerAddress // Force the owner to be the deployer, regardless of whatever the contract says
 
+      const cleanEntrypoints = (entrypoints) =>  Object.fromEntries(
+          Object.entries(entrypoints).filter(([k,v]) => !k.startsWith('/'))
+        )
+
       await context.store.put(context.namespace, context.code)
-      await context.store.put(context.namespace + '.entrypoints', context.entrypoints)
+      await context.store.put(context.namespace + '.entrypoints', cleanEntrypoints(context.entrypoints))
       await context.store.put(context.namespace + '.meta', context.meta)
 
       for (let loc in context.entrypoints) {
@@ -439,6 +444,7 @@ const ops = {
         context.line = previousContext.line
         context.registers = previousContext.registers
         context.stack = previousContext.stack.concat(context.stack.slice(-num))
+        context.callingNamespace = previousContext.callingNamespace
       } else {
         throw new Error(`invalid empty or less than ${num} stack on RET operator`)
       }
@@ -448,7 +454,7 @@ const ops = {
   ECALL: {
     comment: 'Calls a label, pushing current execution state at the bottom of the stack. Resolves the label at runtime.',
     code: 0x18,
-    validate: (elems) => forceArgs(elems, ['identifier']),
+    validate: (elems) => forceArgs(elems, ['pathext']),
     build: (label, context) => Buffer.concat([
       UInt8Buf(ops.ECALL.code),
       StringBuf(label)
@@ -464,8 +470,10 @@ const ops = {
       const savedContext = {
         line: context.line,
         registers: context.registers,
-        stack: context.stack.map(x => x)
+        stack: context.stack.map(x => x),
+        callingNamespace: context.callingNamespace
       }
+      context.callingNamespace = context.currentLineContext //context.namespace
       context.stack = [savedContext].concat(context.stack)
       context.registers = {}
       context.line = line
@@ -640,6 +648,10 @@ const ops = {
         context.stack.push(context.currentLineOwner)
       } else if (ident === 'height') {
         context.stack.push(context.currentHeight)
+      } else if (ident === 'txid') {
+        context.stack.push(context.currentTxid)
+      } else if (ident === 'callingnamespace') {
+        context.stack.push(context.callingNamespace)
       } else {
         throw new Error(`invalid special value ${ident}`)
       }
@@ -759,6 +771,41 @@ const ops = {
     }
   },
 
+  CONCAT: {
+    comment: 'Pops and concatenatess top 2 elements of the stack, pushes result back into the stack',
+    code: 0x2C,
+    validate: (elems) => [],
+    build: (ident) => UInt8Buf(ops.CONCAT.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let second = context.stack.pop()
+        let first = context.stack.pop()
+
+        context.stack.push(first + second)
+      } else {
+        throw new Error(`invalid stack size ${context.stack.length}`)
+      }
+    }
+  },
+
+  BASE58: {
+    comment: 'Pops top of the stack, pushes base58 result back into the stack',
+    code: 0x2D,
+    validate: (elems) => [],
+    build: (ident) => UInt8Buf(ops.BASE58.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 0) {
+        let value = context.stack.pop()
+
+        context.stack.push(bs58.encode(value))
+      } else {
+        throw new Error(`invalid stack size ${context.stack.length}`)
+      }
+    }
+  },
+
   PLUS: {
     comment: 'Sums the two values on top of the stack as signed integers, pushes the result back into the stack',
     code: 0x40,
@@ -805,7 +852,7 @@ const ops = {
   },
 
   DIV: {
-    comment: 'Divides the value on top of the stack by the second value on teh stack as signed integers, pushes the result back into the stack',
+    comment: 'Divides the value on top of the stack by the second value on the stack as signed integers, pushes the result back into the stack',
     code: 0x43,
     validate: (elems) => [],
     build: (context) => UInt8Buf(ops.DIV.code),
@@ -981,12 +1028,18 @@ const ops = {
       if (currentNamespace) {
         if (context.stack.length > 1) {
           let namespace = currentNamespace + '/'
-          /*if (context.currentLineOwner !== context.callerAddress) {
-            namespace += context.callerAddress + '/'
-          }*/
+          let key = namespace + context.stack[context.stack.length - 2]
+          let value = context.stack[context.stack.length - 1]
 
-          //console.log('PUT:', namespace + context.stack[context.stack.length - 2], '=', context.stack[context.stack.length - 1])
-          await context.store.put(namespace + context.stack[context.stack.length - 2], context.stack[context.stack.length - 1])
+          if (context.callingNamespace) {
+            let owner = await context.store.get(key + '.owner')
+
+            if (owner && owner !== context.callingNamespace) {
+              throw new Error(`key owned by ${owner}, cannot PUT`)
+            }
+          }
+
+          await context.store.put(key, value)
         } else {
           throw new Error(`invalid stack (size ${context.stack.length}) on PUT operator`)
         }
