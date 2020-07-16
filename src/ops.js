@@ -1031,7 +1031,7 @@ const ops = {
           let key = namespace + context.stack[context.stack.length - 2]
           let value = context.stack[context.stack.length - 1]
 
-          if (context.callingNamespace) {
+          if (context.callingNamespace && !currentNamespace.startsWith(context.callingNamespace)) {
             let owner = await context.store.get(key + '.owner')
 
             if (owner && owner !== context.callingNamespace) {
@@ -1040,6 +1040,12 @@ const ops = {
           }
 
           await context.store.put(key, value)
+
+          if (context.callingNamespace) {
+            await context.store.put(key + '.owner', context.callingNamespace)
+          }/* else if (context.callerAddress) {
+            await context.store.put(key + '.owner', context.callerAddress)
+          }*/
         } else {
           throw new Error(`invalid stack (size ${context.stack.length}) on PUT operator`)
         }

@@ -35,11 +35,11 @@ END
   PUSHR get
   PUT
 
-  PUSHR orderid
-  PUSHS ".owner"
-  CONCAT
-  PUSHV caller
-  PUT
+  #PUSHR orderid
+  #PUSHS ".owner"
+  #CONCAT
+  #PUSHV caller
+  #PUT
 
   PUSHI 1
   RET 1
@@ -65,11 +65,11 @@ END
   PUSHR get
   PUT
 
-  PUSHR orderid
-  PUSHS ".owner"
-  CONCAT
-  PUSHV caller
-  PUT
+  #PUSHR orderid
+  #PUSHS ".owner"
+  #CONCAT
+  #PUSHV caller
+  #PUT
 
   PUSHI 1
   RET 1

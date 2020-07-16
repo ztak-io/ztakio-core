@@ -86,11 +86,6 @@ END
   PUSHR destination
   SWAP
   PUT # sets the new destination amount
-  SWAP
-  PUSHS ".owner"
-  CONCAT
-  PUSHV callingnamespace
-  PUT
   PUSHI 1
   RET 1
 :escrow_invalid_amount
