@@ -15,8 +15,8 @@ END
   RET 0
 
 :bid
-  REQUIRE {{{tokenA}}}
-  REQUIRE {{{tokenB}}}
+  REQUIRE {{{top}}}
+  REQUIRE {{{bottom}}}
   POP get
   POP give
   PUSHV caller
@@ -27,16 +27,25 @@ END
   POP orderid
   PUSHR orderid
   PUSHR give
-  ECALL {{{tokenB}}}:escrow
+  ECALL {{{bottom}}}:escrow
   VERIFY # Escrow was successful here
   PUSHR orderid
-  PUSHS "{{{tokenA}}}"
+  PUSHS "{{{bottom}}}"
   CONCAT
+  NEW
+  PUSHS "get"
   PUSHR get
+  SET
+  PUSHS "give"
+  PUSHR give
+  SET
+  PUSHS "owner"
+  PUSHV caller
+  SET
   PUT
 
-  PUSHS "(.+){{{tokenA}}}"
-  ENUM bid_enum
+  PUSHS "(.+){{{top}}}"
+  ENUMORD bid_enum "rate" "desc"
 
   PUSHI 1
   RET 1
@@ -44,12 +53,12 @@ END
 :bid_enum
   POP getamnt
   POP orderid
-  PUSHS "DEX {{{tokenA}}}{{{tokenB}}} Order: "
+  PUSHS "DEX {{{top}}}{{{bottom}}} Order: "
   PUSHR orderid
   CONCAT
   LOGP
   PUSHR orderid
-  ECALL {{{tokenA}}}:balance
+  ECALL {{{top}}}:balance
   JZ end_bid_enum # If there's no escrowed balance, skip
   PUSHS "Give value: "
   SWAP
@@ -64,8 +73,8 @@ END
   RET 1
 
 :ask
-  REQUIRE {{{tokenA}}}
-  REQUIRE {{{tokenB}}}
+  REQUIRE {{{top}}}
+  REQUIRE {{{bottom}}}
   POP get
   POP give
   PUSHV caller
@@ -76,12 +85,35 @@ END
   POP orderid
   PUSHR orderid
   PUSHR give
-  ECALL {{{tokenA}}}:escrow
+  ECALL {{{top}}}:escrow
   VERIFY # Escrow was successful here
   PUSHR orderid
-  PUSHS "{{{tokenB}}}"
+  PUSHS "{{{top}}}"
   CONCAT
+  NEW
+  PUSHS "get"
   PUSHR get
+  SET
+  PUSHS "give"
+  PUSHR give
+  SET
+  PUSHS "owner"
+  PUSHV caller
+  SET
+  PUSHS "get_contract"
+  PUSHS "{{{bottom}}}"
+  SET
+  PUSHS "give_contract"
+  PUSHS "{{{top}}}"
+  SET
+  PUSHR get
+  PUSHI 100000000
+  MUL
+  PUSHR give
+  DIV
+  PUSHS "rate"
+  SWAP
+  SET
   PUT
 
   PUSHI 1

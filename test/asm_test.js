@@ -23,8 +23,8 @@ const createSend = (token, address, amount, memo) => {
   return ztak.asm.compile(mustache.render(sendCode, {token, address, amount, memo}))
 }
 
-const createDex = (author, tokenA, tokenB) => {
-  return ztak.asm.compile(mustache.render(dexCode, {tokenA, tokenB, author}))
+const createDex = (author, top, bottom) => {
+  return ztak.asm.compile(mustache.render(dexCode, {top, bottom, author}))
 }
 
 const createDexOrder = (get, give, side) => {
@@ -33,8 +33,8 @@ const createDexOrder = (get, give, side) => {
 
 async function test() {
   const ut = ztak.utils(ztak.networks.mainnet)
-  const tokenPath = '/token'
-  const tokenBPath = '/nekot'
+  const btcToken = '/btc'
+  const usdToken = '/usd'
   const contractOwner = 'ZyJFG9AmGqrDLskgHrNMLNUB9n3yi9Vx2C'
 
   const create = async (owner, token, decimals, name, version) => {
@@ -68,9 +68,9 @@ async function test() {
     }
   }
 
-  const dex = async (owner, tokenA, tokenB) => {
+  const dex = async (owner, top, bottom) => {
     let context = ztak.asm.createContext(ut, store, owner)
-    context.loadProgram(createDex(owner, tokenA, tokenB))
+    context.loadProgram(createDex(owner, top, bottom))
     try {
       await ztak.asm.execute(context)
     } catch (e) {
@@ -118,19 +118,20 @@ async function test() {
   const recipient2 = 'HjnjkuNQzsGaxg873dKmaiciEhs3fdyWCh'
   const recipient3 = 'HXHENtz7j69jhsv2ayKaADwg9Pfy6N18CY'
 
-  await create(contractOwner, tokenPath, 0, 'Standard Token', '0.0.1')
-  await create(contractOwner, tokenBPath, 2, 'Stable Token', '0.0.1')
-  await issuance(contractOwner, tokenPath, 100)
-  await send(tokenPath, contractOwner, recipient1, 10, '')
-  await send(tokenPath, recipient1, recipient2, 1, '')
-  await issuance(contractOwner, tokenBPath, 1000)
-  await send(tokenBPath, contractOwner, recipient2, 40, '')
+  await create(contractOwner, btcToken, 8, 'BTC Token', '0.0.1')
+  await create(contractOwner, usdToken, 2, 'USD Token', '0.0.1')
+  await issuance(contractOwner, btcToken, 100000000)
+  await issuance(contractOwner, usdToken, 10000000)
+  await send(btcToken, contractOwner, recipient1, 50000000, '')
+  await send(btcToken, recipient1, recipient2, 100, '')
+  await send(usdToken, contractOwner, recipient1, 10000, '')
+  await send(usdToken, contractOwner, recipient2, 5000000, '')
 
-  await dex(contractOwner, tokenBPath, tokenPath)
+  await dex(contractOwner, btcToken, usdToken)
   await dexAskOrder(recipient2, 2, 1, 'asd')
   await dexAskOrder(recipient2, 3, 2, 'afd')
   await dexBidOrder(recipient1, 1, 2, 'qwe')
-  await dexBidOrder(recipient1, 2, 3, 'hee')
+  //await dexBidOrder(recipient1, 2, 3, 'hee')
 
   //store.verbose = true
   //await testDex(contractOwner, 2)

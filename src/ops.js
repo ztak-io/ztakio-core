@@ -631,6 +631,68 @@ const ops = {
     }
   },
 
+  ENUMORD: {
+    comment: 'Enumerates values in a namespace. Regular expression is popped from the stack. Matching groups are pushed into each call to the label passed as parameter. Ordered by the first parameter on the order of the second parameter (desc or asc)',
+    code: 0x1D,
+    validate: (elems) => forceArgs(elems, ['identifier', 'string', 'string']),
+    relocateStrategy: 'move',
+    build: (label, key, order, context) => Buffer.concat([
+      UInt8Buf(ops.ENUMORD.code),
+      LineOfCodeBuf(context.findLabel(label)),
+      StringBuf(key),
+      StringBuf(order.toLowerCase()),
+    ]),
+    unpackParams: ['uint16', 'string', 'string'],
+    run: async (line, sortKey, order, context) => {
+      if (line <= context.line) {
+        throw new Error(`cannot iterate line ${line} from line ${context.line}`)
+      }
+
+      if (context.stack.length > 0) {
+        let keyRoot = context.currentLineContext + '/'
+        let re = new RegExp(keyRoot + context.stack.pop())
+        let gen = context.store.iterator({ gt: keyRoot })
+
+        let result = gen.next()
+        let results = []
+        while (!result.done) {
+          const {key, value} = result.value
+          let matches = re.exec(key)
+          if (matches) {
+            results.push(matches.slice(1).concat([value]))
+          }
+          result = gen.next()
+        }
+        if (results.length > 0) {
+          results = results.sort((a, b) => {
+            if (order === 'desc') {
+              return b[sortKey] - a[sortKey]
+            } else if (order === 'asc') {
+              return a[sortKey] - b[sortKey]
+            }
+          })
+          console.log('ENUMORD:', results)
+          let firstResult = results.shift()
+          context.pendingBranchEnum = { line, params: results, returns: [] }
+          const savedContext = {
+            line: context.line,
+            registers: context.registers,
+            stack: context.stack.map(x => x),
+            callingNamespace: context.callingNamespace
+          }
+          context.callingNamespace = context.currentLineContext
+          context.stack = [savedContext].concat(context.stack).concat(firstResult)
+          context.registers = {}
+          context.line = line
+        } else {
+          context.stack.push(1n)
+        }
+      } else {
+        throw new Error(`invalid stack size (${context.stack.length}) on ENUM operator (must be at least 1)`)
+      }
+    }
+  },
+
   POP: {
     comment: 'Pop value from the stack to a given register on the context',
     code: 0x20,
@@ -875,6 +937,53 @@ const ops = {
     }
   },
 
+  NEW: {
+    comment: 'Pushes an empty dictionary into the stack',
+    code: 0x2E,
+    validate: (elems) => [],
+    build: (ident) => UInt8Buf(ops.NEW.code),
+    unpackParams: [],
+    run: (context) => {
+      context.stack.push({})
+    }
+  },
+
+  SET: {
+    comment: 'Sets the value on top of the stack to the key on the second top in the dictionary in the third top.',
+    code: 0x2F,
+    validate: (elems) => [],
+    build: (ident) => UInt8Buf(ops.SET.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 2) {
+        let value = context.stack.pop()
+        let key = context.stack.pop()
+        let dict = context.stack.pop()
+        dict[key] = value
+        context.stack.push(dict)
+      } else {
+        throw new Error(`invalid stack size ${context.stack.length}`)
+      }
+    }
+  },
+
+  GET: {
+    comment: 'Gets the key on top of the stack from the dictionary in the second top.',
+    code: 0x30,
+    validate: (elems) => [],
+    build: (ident) => UInt8Buf(ops.GET.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let key = context.stack.pop()
+        let dict = context.stack[context.stack.length - 1]
+        context.stack.push(dict[key])
+      } else {
+        throw new Error(`invalid stack size ${context.stack.length}`)
+      }
+    }
+  },
+
   PLUS: {
     comment: 'Sums the two values on top of the stack as signed integers, pushes the result back into the stack',
     code: 0x40,
@@ -906,14 +1015,16 @@ const ops = {
   },
 
   MUL: {
-    comment: 'Multiplies the two values on top of the stack as signed integers, pushes the result back into the stack',
+    comment: 'Pops and multiplies the two values on top of the stack as signed integers, pushes the result back into the stack',
     code: 0x42,
     validate: (elems) => [],
     build: (context) => UInt8Buf(ops.MUL.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        context.stack.push(context.stack[context.stack.length - 1] * context.stack[context.stack.length - 2])
+        let v1 = context.stack.pop()
+        let v2 = context.stack.pop()
+        context.stack.push(v1 * v2)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MUL operator`)
       }
@@ -921,14 +1032,16 @@ const ops = {
   },
 
   DIV: {
-    comment: 'Divides the value on top of the stack by the second value on the stack as signed integers, pushes the result back into the stack',
+    comment: 'Pops and divides the second value on top of the stack by the top of the stack as signed integers, pushes the result back into the stack',
     code: 0x43,
     validate: (elems) => [],
     build: (context) => UInt8Buf(ops.DIV.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        context.stack.push(context.stack[context.stack.length - 1] / context.stack[context.stack.length - 2])
+        let down = context.stack.pop()
+        let up = context.stack.pop()
+        context.stack.push(up / down)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on DIV operator`)
       }
@@ -1161,7 +1274,7 @@ const ops = {
   },
 
   LOGP: {
-    comment: 'Prunable pop log',
+    comment: 'Non-prunable pop log',
     code: 0xFD,
     validate: (elems) => forceArgs(elems),
     build: () => Buffer.concat([
