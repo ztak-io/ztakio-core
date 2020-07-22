@@ -664,14 +664,14 @@ const ops = {
           result = gen.next()
         }
         if (results.length > 0) {
-          results = results.sort((a, b) => {
+          results = results.sort(([ka, a], [kb, b]) => {
             if (order === 'desc') {
-              return b[sortKey] - a[sortKey]
+              return Number(a[sortKey] - b[sortKey])
             } else if (order === 'asc') {
-              return a[sortKey] - b[sortKey]
+              return Number(b[sortKey] - a[sortKey])
             }
           })
-          console.log('ENUMORD:', results)
+
           let firstResult = results.shift()
           context.pendingBranchEnum = { line, params: results, returns: [] }
           const savedContext = {
@@ -891,7 +891,7 @@ const ops = {
           if (ident in callee.registers)  {
             context.stack.push(callee.registers[ident])
           } else {
-            throw new Error(`invalid callee register ${ident} on PUSHPR`)
+            throw new Error(`invalid callee register ${ident} on PUSHPR: Available ${Object.keys(callee.registers)}`)
           }
         } else {
           throw new Error(`no callee stack on PUSHPR`)
@@ -948,11 +948,11 @@ const ops = {
     }
   },
 
-  SET: {
+  SETO: {
     comment: 'Sets the value on top of the stack to the key on the second top in the dictionary in the third top.',
     code: 0x2F,
     validate: (elems) => [],
-    build: (ident) => UInt8Buf(ops.SET.code),
+    build: (ident) => UInt8Buf(ops.SETO.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 2) {
@@ -967,11 +967,11 @@ const ops = {
     }
   },
 
-  GET: {
+  GETO: {
     comment: 'Gets the key on top of the stack from the dictionary in the second top.',
     code: 0x30,
     validate: (elems) => [],
-    build: (ident) => UInt8Buf(ops.GET.code),
+    build: (ident) => UInt8Buf(ops.GETO.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {

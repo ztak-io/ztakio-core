@@ -136,7 +136,11 @@ async function test() {
   //store.verbose = true
   //await testDex(contractOwner, 2)
 
-  console.log(store.values)
+  console.log(
+    Object.fromEntries(
+      Object.entries(store.values).filter(([k,v]) => k.match(/\/.*\//))
+    )
+  )
 }
 
 test()

@@ -35,17 +35,33 @@ END
   NEW
   PUSHS "get"
   PUSHR get
-  SET
+  SETO
   PUSHS "give"
   PUSHR give
-  SET
+  SETO
   PUSHS "owner"
   PUSHV caller
-  SET
+  SETO
+  PUSHS "get_contract"
+  PUSHS "{{{bottom}}}"
+  SETO
+  PUSHS "give_contract"
+  PUSHS "{{{top}}}"
+  SETO
+  PUSHR get
+  PUSHI 1000000
+  MUL
+  PUSHR give
+  DIV
+  POP rate
+  PUSHR rate
+  PUSHS "rate"
+  SWAP
+  SETO
   PUT
 
   PUSHS "(.+){{{top}}}"
-  ENUMORD bid_enum "rate" "desc"
+  ENUMORD bid_enum "rate" "asc"
 
   PUSHI 1
   RET 1
@@ -53,22 +69,19 @@ END
 :bid_enum
   POP getamnt
   POP orderid
-  PUSHS "DEX {{{top}}}{{{bottom}}} Order: "
-  PUSHR orderid
-  CONCAT
-  LOGP
   PUSHR orderid
   ECALL {{{top}}}:balance
   JZ end_bid_enum # If there's no escrowed balance, skip
-  PUSHS "Give value: "
-  SWAP
-  CONCAT
-  LOGP
-  PUSHS "Get value: "
+  POP escrowed
   PUSHR getamnt
+  PUSHS "rate"
+  GETO
+  #PUSHS "Rate: "
+  #SWAP
+  PUSHS " <----"
   CONCAT
-:end_bid_enum
   LOGP
+:end_bid_enum
   PUSHI 1
   RET 1
 
@@ -93,27 +106,29 @@ END
   NEW
   PUSHS "get"
   PUSHR get
-  SET
+  SETO
   PUSHS "give"
   PUSHR give
-  SET
+  SETO
   PUSHS "owner"
   PUSHV caller
-  SET
+  SETO
   PUSHS "get_contract"
   PUSHS "{{{bottom}}}"
-  SET
+  SETO
   PUSHS "give_contract"
   PUSHS "{{{top}}}"
-  SET
+  SETO
   PUSHR get
-  PUSHI 100000000
+  PUSHI 1000000
   MUL
   PUSHR give
   DIV
+  POP rate
+  PUSHR rate
   PUSHS "rate"
   SWAP
-  SET
+  SETO
   PUT
 
   PUSHI 1
