@@ -51,15 +51,16 @@ END
   PUSHV caller
   SWAP
   PUT
-  DROP2
   PUSHR destination
   GETI 0 # Gets current destination balance
   SINK # Removes the destination address
-  SINK
+  PUSHR amount
   PLUS
   PUSHR destination
   SWAP
   PUT # sets the new destination amount
+  PUSHV caller
+  CALL _cleanup_address
   PUSHI 1
   RET 1
 :send_invalid_amount
@@ -78,15 +79,14 @@ END
   PUSHV caller
   SWAP
   PUT
-  DROP2
   PUSHR destination
   GETI 0 # Gets current destination balance
-  SINK # Removes the destination address
-  SINK
+  PUSHR amount
   PLUS
-  PUSHR destination
-  SWAP
   PUT # sets the new destination amount
+  PUSHV caller
+  CALL _cleanup_address
+
   PUSHI 1
   RET 1
 :escrow_invalid_amount
@@ -106,21 +106,35 @@ END
   PUSHR source
   SWAP
   PUT
-  DROP2
   PUSHR destination
   GETI 0 # Gets current destination balance
-  SINK # Removes the destination address
   SINK
+  PUSHR amount
   PLUS
   PUSHR destination
   SWAP
   PUT # sets the new destination amount
+  PUSHR source
+  CALL _cleanup_address
+
   PUSHI 1
   RET 1
 :sendfrom_invalid_amount
+  LOG "Sendfrom invalid amount"
   PUSHI 0
   RET 1
 
 :balance
   GETI 0
   RET 1
+
+# Maintain the contract tidy and small, no dangling 0s
+:_cleanup_address
+  POP address
+  PUSHR address
+  GETI -1
+  JNZ _cleanup_end
+  PUSHR address
+  DEL
+:_cleanup_end
+  RET 0

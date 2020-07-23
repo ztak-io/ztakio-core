@@ -24,7 +24,7 @@ const createSend = (token, address, amount, memo) => {
 }
 
 const createDex = (author, top, bottom) => {
-  return ztak.asm.compile(mustache.render(dexCode, {top, bottom, author}))
+  return ztak.asm.compile(mustache.render(dexCode, {top, bottom, author, tradeRatePrecision: '1000000000000000000'}))
 }
 
 const createDexOrder = (get, give, side) => {
@@ -120,17 +120,21 @@ async function test() {
 
   await create(contractOwner, btcToken, 8, 'BTC Token', '0.0.1')
   await create(contractOwner, usdToken, 2, 'USD Token', '0.0.1')
-  await issuance(contractOwner, btcToken, 100000000)
-  await issuance(contractOwner, usdToken, 10000000)
-  await send(btcToken, contractOwner, recipient1, 50000000, '')
-  await send(btcToken, recipient1, recipient2, 100, '')
+  await issuance(contractOwner, btcToken, 10000000)
+  await issuance(contractOwner, usdToken, 10000)
+  await send(btcToken, contractOwner, recipient2, 10000000, '')
   await send(usdToken, contractOwner, recipient1, 10000, '')
-  await send(usdToken, contractOwner, recipient2, 5000000, '')
 
   await dex(contractOwner, btcToken, usdToken)
-  await dexAskOrder(recipient2, 2, 1, 'asd')
-  await dexAskOrder(recipient2, 3, 2, 'afd')
-  await dexBidOrder(recipient1, 1, 2, 'qwe')
+  await dexAskOrder(recipient2, 21, 9, 'asd')
+  //await dexAskOrder(recipient2, 3, 2, 'afd')
+  //await dexBidOrder(recipient1, 100, 190, 'qwe')
+  //await dexBidOrder(recipient1, 90, 210, 'qwe') // Ask lower
+  //await dexBidOrder(recipient1, 9, 21, 'qwe') // Equal
+  await dexBidOrder(recipient1, 4, 9, 'qwe') // Bid lower
+  await dexBidOrder(recipient1, 4, 9, 'qwe1') // Bid lower
+  await dexBidOrder(recipient1, 4, 9, 'qwe2') // Bid lower*/
+
   //await dexBidOrder(recipient1, 2, 3, 'hee')
 
   //store.verbose = true

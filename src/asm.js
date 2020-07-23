@@ -156,14 +156,36 @@ function createContext(utils, store, callerAddress, currentTxid) {
     code: null,
     line: 0,
     meta: null,
-    entrypoints: null,
-    registers: null,
-    stack: null,
+    entrypoints: {},
+    registers: {},
+    stack: [],
     executing: false,
-    callingNamespace: null,
+    callingNamespace: '',
     pendingBranchEnum: null,
+    debug: false,
     assertExists: {},
+    constants: {},
     callerAddress, store, utils, currentTxid,
+
+    stackPush: (itm) => {
+      ob.stack.push(itm)
+    },
+
+    stackPop: () => {
+      return ob.stack.pop()
+    },
+
+    stackSlice: (a, b) => {
+      return ob.stack.slice(a, b)
+    },
+
+    stackShift: () => {
+      return ob.stack.shift()
+    },
+
+    stackMap: (f) => {
+      return ob.stack.map(f)
+    },
 
     findLabel: (name) => {
       if (name in ob.entrypoints) {
@@ -186,6 +208,7 @@ function createContext(utils, store, callerAddress, currentTxid) {
       ob.entrypoints = {}
       ob.meta = {}
       ob.registers = {}
+      ob.constants = {}
     },
 
     appendProgram: (namespace, buf, entrypoints, meta) => {
@@ -249,7 +272,7 @@ async function execute(context, entrypoint) {
 
       context.currentLineOwner = currentLine.owner || context.callerAddress
       context.currentLineContext = currentLine.overrideNamespace || context.namespace
-      //console.log('--->', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
+      //console.log('--->',  context.currentLineContext, ' ', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
       //console.log('--->', context.line, '/', context.program.length, context.stack, currentLine.opName, ...currentLine.params)
       //console.log('--->', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
       await op.run(...currentLine.params, context)

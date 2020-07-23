@@ -1,3 +1,65 @@
+
+// From https://coolaj86.com/articles/convert-decimal-to-hex-with-js-bigints/ //
+function bnToHex(bn) {
+  var pos = true;
+  bn = BigInt(bn);
+
+  if (bn < 0) {
+    pos = false;
+    bn = bitnot(bn);
+  }
+
+  var base = 16;
+  var hex = bn.toString(base);
+  if (hex.length % 2) {
+    hex = '0' + hex;
+  }
+
+  var highbyte = parseInt(hex.slice(0, 2), 16);
+  var highbit = (0x80 & highbyte);
+
+  if (pos && highbit) {
+    hex = '00' + hex;
+  }
+
+  return hex;
+}
+
+function bitnot(bn) {
+  bn = -bn;
+  var bin = (bn).toString(2)
+  var prefix = '';
+  while (bin.length % 8) {
+    bin = '0' + bin;
+  }
+  if ('1' === bin[0] && -1 !== bin.slice(1).indexOf('1')) {
+    prefix = '11111111';
+  }
+  bin = bin.split('').map(function (i) {
+    return '0' === i ? '1' : '0';
+  }).join('');
+  return BigInt('0b' + prefix + bin) + BigInt(1);
+}
+
+function hexToBn(hex) {
+  if (hex.length % 2) {
+    hex = '0' + hex;
+  }
+
+  var highbyte = parseInt(hex.slice(0, 2), 16)
+  var bn = BigInt('0x' + hex);
+
+  if (0x80 & highbyte) {
+    bn = BigInt('0b' + bn.toString(2).split('').map(function (i) {
+      return '0' === i ? 1 : 0
+    }).join('')) + BigInt(1);
+    bn = -bn;
+  }
+
+  return bn;
+}
+// End of coolaj86 snippets
+
 function UInt8Buf(v) {
   const b = Buffer.alloc(1)
   b.writeUInt8(v)
@@ -22,6 +84,14 @@ function UInt64Buf(v) {
   return b
 }
 
+function BigInt2Buf(v) {
+  return Buffer.from(bnToHex(v), 'hex')
+}
+
+function Buf2BigInt(b) {
+  return hexToBn(b.toString('hex'))
+}
+
 const LineOfCodeBuf = UInt16Buf
 
 function StringBuf(s) {
@@ -31,5 +101,6 @@ function StringBuf(s) {
 }
 
 module.exports = {
-  UInt8Buf, UInt16Buf, Int64Buf, UInt64Buf, LineOfCodeBuf, StringBuf
+  UInt8Buf, UInt16Buf, Int64Buf, UInt64Buf, LineOfCodeBuf, StringBuf,
+  BigInt2Buf, Buf2BigInt
 }

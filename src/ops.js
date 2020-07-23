@@ -1,7 +1,7 @@
 const { crypto } = require('bitcoinjs-lib')
 const bitcoinMessage = require('bitcoinjs-message')
 const bs58 = require('bs58')
-const {UInt8Buf, StringBuf, LineOfCodeBuf, Int64Buf, UInt64Buf, UInt16Buf} = require('./buffers')
+const {UInt8Buf, StringBuf, LineOfCodeBuf, Int64Buf, UInt64Buf, UInt16Buf, BigInt2Buf} = require('./buffers')
 
 function forceArgs(list, types) {
   let results = []
@@ -270,7 +270,7 @@ const ops = {
       const savedContext = {
         line: context.line,
         registers: context.registers,
-        stack: context.stack.map(x => x)
+        stack: context.stackMap(x => x)
       }
       context.stack = [savedContext].concat(context.stack)
       context.registers = {}
@@ -319,6 +319,10 @@ const ops = {
       }
 
       if (context.stack.length > 0) {
+        if (context.debug) {
+          console.log('JZ comp', context.stack[context.stack.length - 1])
+        }
+
         if (context.stack[context.stack.length - 1] === 0n) {
           context.line = line - 1
         }
@@ -441,26 +445,35 @@ const ops = {
       let shouldGoBackToPreviousContext = true
       if (context.stack.length > num) {
         if (context.pendingBranchEnum) {
+          if (context.debug) {
+            console.log('stack prev', context.stack[0].registers)
+          }
+
           if (context.pendingBranchEnum.params.length > 0) {
-            context.pendingBranchEnum.returns = context.pendingBranchEnum.returns.concat(context.stack.slice(-num))
-            context.stack = context.stack.slice(0, context.stack.length - num).concat(context.pendingBranchEnum.params.shift())
+            context.pendingBranchEnum.returns = context.pendingBranchEnum.returns.concat(context.stackSlice(-num))
+            context.stack = context.stackSlice(0, context.stack.length - num).concat(context.pendingBranchEnum.params.shift())
             context.line = context.pendingBranchEnum.line
             shouldGoBackToPreviousContext = false
           } else {
-            context.pendingBranchEnum.returns = context.pendingBranchEnum.returns.concat(context.stack.slice(-num))
+            context.pendingBranchEnum.returns = context.pendingBranchEnum.returns.concat(context.stackSlice(-num))
             let returns = context.pendingBranchEnum.returns
-            context.stack = context.stack.slice(0, context.stack.length - num).concat(returns).concat([returns.length])
+            context.stack = context.stackSlice(0, context.stack.length - num).concat(returns).concat([returns.length])
             context.pendingBranchEnum = null
           }
         }
 
+        if (context.debug) {
+          console.log('shouldGoBackToPreviousContext', shouldGoBackToPreviousContext, context.stack[0].registers)
+        }
+
         if (shouldGoBackToPreviousContext) {
-          const previousContext = context.stack.shift()
+          const previousContext = context.stackShift()
 
           context.line = previousContext.line
           context.registers = previousContext.registers
-          context.stack = previousContext.stack.concat(context.stack.slice(-num))
+          context.stack = previousContext.stack.concat(context.stackSlice(-num))
           context.callingNamespace = previousContext.callingNamespace
+          context.pendingBranchEnum = previousContext.pendingBranchEnum
         }
       } else {
         throw new Error(`invalid empty or less than ${num} stack on RET operator`)
@@ -487,9 +500,11 @@ const ops = {
       const savedContext = {
         line: context.line,
         registers: context.registers,
-        stack: context.stack.map(x => x),
-        callingNamespace: context.callingNamespace
+        stack: context.stackMap(x => x),
+        callingNamespace: context.callingNamespace,
+        pendingBranchEnum: context.pendingBranchEnum
       }
+      context.pendingBranchEnum = null
       context.callingNamespace = context.currentLineContext //context.namespace
       context.stack = [savedContext].concat(context.stack)
       context.registers = {}
@@ -505,7 +520,7 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 0) {
-        const top = context.stack.pop()
+        const top = context.stackPop()
         if (!(top === 1 || top === 1n)) {
           throw new Error(`invalid stack on VERIFY op (top != 1)`)
         }
@@ -558,7 +573,7 @@ const ops = {
 
       if (context.stack.length > 3) {
         if (context.stack[context.stack.length - 2] > 0) {
-          let r = context.stack.pop()
+          let r = context.stackPop()
           let v = context.stack[context.stack.length - 3]
 
           context.stack[context.stack.length - 3] += context.stack[context.stack.length - 1] // Mutate stack for next iteration
@@ -566,9 +581,9 @@ const ops = {
           if (r === 0n && v <= context.stack[context.stack.length - 2]) {
             context.line = context.line - 1 // On return, repeat iteration with changed stack
             await ops.CALL.run(line, context)
-            context.stack.push(v)
+            context.stackPush(v)
           } else {
-            context.stack.push(r)
+            context.stackPush(r)
           }
         } else {
           throw new Error(`ITER step must be positive non-zero integer`)
@@ -596,7 +611,7 @@ const ops = {
 
       if (context.stack.length > 0) {
         let keyRoot = context.currentLineContext + '/'
-        let re = new RegExp(keyRoot + context.stack.pop())
+        let re = new RegExp(keyRoot + context.stackPop())
         let gen = context.store.iterator({ gt: keyRoot })
 
         let result = gen.next()
@@ -615,7 +630,7 @@ const ops = {
           const savedContext = {
             line: context.line,
             registers: context.registers,
-            stack: context.stack.map(x => x),
+            stack: context.stackMap(x => x),
             callingNamespace: context.callingNamespace
           }
           context.callingNamespace = context.currentLineContext
@@ -623,7 +638,7 @@ const ops = {
           context.registers = {}
           context.line = line
         } else {
-          context.stack.push(1n)
+          context.stackPush(1n)
         }
       } else {
         throw new Error(`invalid stack size (${context.stack.length}) on ENUM operator (must be at least 1)`)
@@ -650,7 +665,7 @@ const ops = {
 
       if (context.stack.length > 0) {
         let keyRoot = context.currentLineContext + '/'
-        let re = new RegExp(keyRoot + context.stack.pop())
+        let re = new RegExp(keyRoot + context.stackPop())
         let gen = context.store.iterator({ gt: keyRoot })
 
         let result = gen.next()
@@ -666,9 +681,9 @@ const ops = {
         if (results.length > 0) {
           results = results.sort(([ka, a], [kb, b]) => {
             if (order === 'desc') {
-              return Number(a[sortKey] - b[sortKey])
-            } else if (order === 'asc') {
               return Number(b[sortKey] - a[sortKey])
+            } else if (order === 'asc') {
+              return Number(a[sortKey] - b[sortKey])
             }
           })
 
@@ -677,15 +692,19 @@ const ops = {
           const savedContext = {
             line: context.line,
             registers: context.registers,
-            stack: context.stack.map(x => x),
+            stack: context.stackMap(x => x),
             callingNamespace: context.callingNamespace
           }
           context.callingNamespace = context.currentLineContext
-          context.stack = [savedContext].concat(context.stack).concat(firstResult)
+          context.stack = [savedContext].concat(context.stackMap(x => x)).concat(firstResult)
           context.registers = {}
           context.line = line
+
+          if (context.debug) {
+            console.log('enumord stack', context.stack[0].registers)
+          }
         } else {
-          context.stack.push(1n)
+          context.stackPush(1n)
         }
       } else {
         throw new Error(`invalid stack size (${context.stack.length}) on ENUM operator (must be at least 1)`)
@@ -703,7 +722,7 @@ const ops = {
     ]),
     unpackParams: ['string'],
     run: (identifier, context) => {
-      context.registers[identifier] = context.stack.pop()
+      context.registers[identifier] = context.stackPop()
     }
   },
 
@@ -717,7 +736,7 @@ const ops = {
     ]),
     unpackParams: ['string'],
     run: (str, context) => {
-      context.stack.push(str)
+      context.stackPush(str)
     }
   },
 
@@ -731,7 +750,7 @@ const ops = {
     ]),
     unpackParams: ['integer'],
     run: (val, context) => {
-      context.stack.push(val)
+      context.stackPush(val)
     }
   },
 
@@ -745,7 +764,7 @@ const ops = {
     ]),
     unpackParams: ['integer'],
     run: (val, context) => {
-      context.stack.push(val)
+      context.stackPush(val)
     }
   },
 
@@ -759,7 +778,7 @@ const ops = {
     ]),
     unpackParams: ['string'],
     run: (ident, context) => {
-      context.stack.push(context.registers[ident])
+      context.stackPush(context.registers[ident])
     }
   },
 
@@ -774,15 +793,15 @@ const ops = {
     unpackParams: ['string'],
     run: (ident, context) => {
       if (ident === 'caller') {
-        context.stack.push(context.callerAddress)
+        context.stackPush(context.callerAddress)
       } else if (ident === 'owner') {
-        context.stack.push(context.currentLineOwner)
+        context.stackPush(context.currentLineOwner)
       } else if (ident === 'height') {
-        context.stack.push(context.currentHeight)
+        context.stackPush(context.currentHeight)
       } else if (ident === 'txid') {
-        context.stack.push(context.currentTxid)
+        context.stackPush(context.currentTxid)
       } else if (ident === 'callingnamespace') {
-        context.stack.push(context.callingNamespace)
+        context.stackPush(context.callingNamespace)
       } else {
         throw new Error(`invalid special value ${ident}`)
       }
@@ -815,7 +834,7 @@ const ops = {
     build: (identifier) => UInt8Buf(ops.DROP.code),
     unpackParams: [],
     run: (context) => {
-      context.stack.pop()
+      context.stackPop()
     }
   },
 
@@ -831,7 +850,7 @@ const ops = {
     run: async (metaIdent, context) => {
       const metaName = context.namespace + '.meta'
       let metaInfo = await context.store.get(metaName)
-      const newval = context.stack.pop()
+      const newval = context.stackPop()
       if (metaIdent === 'Address') {
         // Value must be valid
         try {
@@ -854,7 +873,7 @@ const ops = {
     run: (context) => {
       if (context.stack.length > 1) {
         let first = context.stack[context.stack.length - 1]
-        context.stack.pop()
+        context.stackPop()
         context.stack[context.stack.length - 1] = first
       } else {
         throw new Error(`invalid stack size ${context.stack.length} on SINK`)
@@ -869,8 +888,8 @@ const ops = {
     build: (identifier) => UInt8Buf(ops.DROP2.code),
     unpackParams: [],
     run: (context) => {
-      context.stack.pop()
-      context.stack.pop()
+      context.stackPop()
+      context.stackPop()
     }
   },
 
@@ -889,8 +908,13 @@ const ops = {
 
         if (typeof(callee) === 'object') {
           if (ident in callee.registers)  {
-            context.stack.push(callee.registers[ident])
+            context.stackPush(callee.registers[ident])
           } else {
+            if (context.debug) {
+              console.log(context.stack)
+            }
+
+            console.log(callee.registers)
             throw new Error(`invalid callee register ${ident} on PUSHPR: Available ${Object.keys(callee.registers)}`)
           }
         } else {
@@ -903,17 +927,17 @@ const ops = {
   },
 
   CONCAT: {
-    comment: 'Pops and concatenatess top 2 elements of the stack, pushes result back into the stack',
+    comment: 'Pops (as strings) and concatenatess top 2 elements of the stack, pushes result back into the stack',
     code: 0x2C,
     validate: (elems) => [],
     build: (ident) => UInt8Buf(ops.CONCAT.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let second = context.stack.pop()
-        let first = context.stack.pop()
+        let second = context.stackPop() + ''
+        let first = context.stackPop() + ''
 
-        context.stack.push(first + second)
+        context.stackPush(first + second)
       } else {
         throw new Error(`invalid stack size ${context.stack.length}`)
       }
@@ -928,9 +952,9 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 0) {
-        let value = context.stack.pop()
+        let value = context.stackPop()
 
-        context.stack.push(bs58.encode(value))
+        context.stackPush(bs58.encode(value))
       } else {
         throw new Error(`invalid stack size ${context.stack.length}`)
       }
@@ -944,23 +968,23 @@ const ops = {
     build: (ident) => UInt8Buf(ops.NEW.code),
     unpackParams: [],
     run: (context) => {
-      context.stack.push({})
+      context.stackPush({})
     }
   },
 
   SETO: {
-    comment: 'Sets the value on top of the stack to the key on the second top in the dictionary in the third top.',
+    comment: 'Pops the value on top of the stack, then pops the key and sets the corresponding value into the dictionary in the remaining top.',
     code: 0x2F,
     validate: (elems) => [],
     build: (ident) => UInt8Buf(ops.SETO.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 2) {
-        let value = context.stack.pop()
-        let key = context.stack.pop()
-        let dict = context.stack.pop()
+        let value = context.stackPop()
+        let key = context.stackPop()
+        let dict = context.stackPop()
         dict[key] = value
-        context.stack.push(dict)
+        context.stackPush(dict)
       } else {
         throw new Error(`invalid stack size ${context.stack.length}`)
       }
@@ -968,31 +992,80 @@ const ops = {
   },
 
   GETO: {
-    comment: 'Gets the key on top of the stack from the dictionary in the second top.',
+    comment: 'Pops the key from the stack, gets the correpsonding value from the dictionary in the resulting top.',
     code: 0x30,
     validate: (elems) => [],
     build: (ident) => UInt8Buf(ops.GETO.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let key = context.stack.pop()
+        let key = context.stackPop()
         let dict = context.stack[context.stack.length - 1]
-        context.stack.push(dict[key])
+        context.stackPush(dict[key])
       } else {
         throw new Error(`invalid stack size ${context.stack.length}`)
       }
     }
   },
 
+  CONSTI: {
+    comment: 'Creates a constant integer for usage along the contract',
+    code: 0x31,
+    validate: (elems) => forceArgs(elems, ['identifier', 'number']),
+    build: (ident, val) => Buffer.concat([
+      UInt8Buf(ops.CONSTI.code),
+      StringBuf(ident),
+      Int64Buf(val)
+    ]),
+    unpackParams: ['string', 'integer'],
+    run: (ident, val, context) => {
+      context.constants[ident] = val
+    }
+  },
+
+  PUSHCI: {
+    comment: 'Push integer constant into the stack',
+    code: 0x32,
+    validate: (elems) => forceArgs(elems, ['identifier']),
+    build: (ident) => Buffer.concat([
+      UInt8Buf(ops.PUSHCI.code),
+      StringBuf(ident)
+    ]),
+    unpackParams: ['string'],
+    run: (ident, context) => {
+      context.stackPush(context.constants[ident])
+    }
+  },
+
+  JMP: {
+    comment: 'Jumps to a given label',
+    code: 0x33,
+    validate: (elems) => forceArgs(elems, ['identifier']),
+    relocateStrategy: 'move',
+    build: (label, context) => Buffer.concat([
+      UInt8Buf(ops.JMP.code),
+      LineOfCodeBuf(context.findLabel(label))
+    ]),
+    unpackParams: ['uint16'],
+    run: (line, context) => {
+      if (line <= context.line) {
+        throw new Error(`cannot call line ${line} from line ${context.line}`)
+      }
+      context.line = line - 1
+    }
+  },
+
   PLUS: {
-    comment: 'Sums the two values on top of the stack as signed integers, pushes the result back into the stack',
+    comment: 'Pops and sums the two values on top of the stack as signed integers, pushes the result back into the stack',
     code: 0x40,
     validate: (elems) => [],
     build: (context) => UInt8Buf(ops.PLUS.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        context.stack.push(context.stack[context.stack.length - 1] + context.stack[context.stack.length - 2])
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(a + b)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on PLUS operator`)
       }
@@ -1000,14 +1073,16 @@ const ops = {
   },
 
   MINUS: {
-    comment: 'Subtracts the second value on the stack from the first value as signed integers, pushes the result back into the stack',
+    comment: 'Pops and subtracts the second value on the stack from the first value as signed integers, pushes the result back into the stack',
     code: 0x41,
     validate: (elems) => [],
     build: (context) => UInt8Buf(ops.MINUS.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        context.stack.push(context.stack[context.stack.length - 1] - context.stack[context.stack.length - 2])
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(a - b)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MINUS operator`)
       }
@@ -1022,9 +1097,9 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let v1 = context.stack.pop()
-        let v2 = context.stack.pop()
-        context.stack.push(v1 * v2)
+        let v1 = context.stackPop()
+        let v2 = context.stackPop()
+        context.stackPush(v1 * v2)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MUL operator`)
       }
@@ -1039,9 +1114,9 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let down = context.stack.pop()
-        let up = context.stack.pop()
-        context.stack.push(up / down)
+        let down = context.stackPop()
+        let up = context.stackPop()
+        context.stackPush(up / down)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on DIV operator`)
       }
@@ -1049,14 +1124,14 @@ const ops = {
   },
 
   NEG: {
-    comment: 'Negates the value on top of the stack, pushes the result back into the stack',
+    comment: 'Pops and negates the value on top of the stack, pushes the result back into the stack',
     code: 0x44,
     validate: (elems) => [],
     build: (context) => UInt8Buf(ops.NEG.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 0) {
-        context.stack.push(-context.stack[context.stack.length - 1])
+        context.stackPush(-context.stackPop())
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on NEG operator`)
       }
@@ -1064,14 +1139,16 @@ const ops = {
   },
 
   AND: {
-    comment: 'Bitwise ANDs the top 2 values of the stack. Pushes the result into the stack.',
+    comment: 'Pops and bitwise ANDs the top 2 values of the stack. Pushes the result into the stack.',
     code: 0x45,
     validate: (elems) => [],
     build: (context) => UInt8Buf(ops.AND.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        context.stack.push(context.stack[context.stack.length - 2] & context.stack[context.stack.length - 1])
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(a & b)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on AND operator`)
       }
@@ -1079,14 +1156,16 @@ const ops = {
   },
 
   OR: {
-    comment: 'Bitwise ORs the top 2 values of the stack. Pushes the result into the stack.',
+    comment: 'Pops and bitwise ORs the top 2 values of the stack. Pushes the result into the stack.',
     code: 0x46,
     validate: (elems) => [],
     build: (context) => UInt8Buf(ops.OR.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        context.stack.push(context.stack[context.stack.length - 2] | context.stack[context.stack.length - 1])
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(a | b)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on OR operator`)
       }
@@ -1094,14 +1173,16 @@ const ops = {
   },
 
   XOR: {
-    comment: 'Bitwise XORs the top 2 values of the stack. Pushes the result into the stack.',
+    comment: 'Pops and bitwise XORs the top 2 values of the stack. Pushes the result into the stack.',
     code: 0x47,
     validate: (elems) => [],
     build: (context) => UInt8Buf(ops.XOR.code),
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        context.stack.push(context.stack[context.stack.length - 2] ^ context.stack[context.stack.length - 1])
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(a ^ b)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on XOR operator`)
       }
@@ -1122,7 +1203,7 @@ const ops = {
         } else if (!Buffer.isBuffer(val)) {
           throw new Error(`cannot do SHA256 over ${typeof(val)}`)
         }
-        context.stack.push(crypto.sha256(val))
+        context.stackPush(crypto.sha256(val))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on SHA256 operator`)
       }
@@ -1143,7 +1224,7 @@ const ops = {
         } else if (!Buffer.isBuffer(val)) {
           throw new Error(`cannot do RIPEMD160 over ${typeof(val)}`)
         }
-        context.stack.push(crypto.ripemd160(val))
+        context.stackPush(crypto.ripemd160(val))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on RIPEMD160 operator`)
       }
@@ -1158,11 +1239,11 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 2) {
-        const signature = context.stack.pop()
-        const message = context.stack.pop()
-        const address = context.stack.pop()
+        const signature = context.stackPop()
+        const message = context.stackPop()
+        const address = context.stackPop()
         const sigResult = bitcoinMessage.verify(message, address, signature)?1n:0n
-        context.stack.push(sigResult)
+        context.stackPush(sigResult)
       } else {
         throw new Error(`invalid stack size (${context.stack.length}) on CHECKSIG op (must be 3)`)
       }
@@ -1185,7 +1266,7 @@ const ops = {
         if (context.stack.length > 0) {
           let namespace = currentNamespace + '/'
 
-          await context.stack.push(context.store.get(namespace + context.stack[context.stack.length - 1]))
+          await context.stackPush(context.store.get(namespace + context.stack[context.stack.length - 1]))
         } else {
           throw new Error(`invalid stack (size ${context.stack.length}) on GET operator`)
         }
@@ -1203,6 +1284,9 @@ const ops = {
     unpackParams: [],
     run: async (context) => {
       let currentNamespace = context.namespace
+      if (context.debug) {
+        console.log(context.stack.slice(-2))
+      }
       if (context.currentLineContext) {
         currentNamespace = context.currentLineContext
       }
@@ -1221,6 +1305,9 @@ const ops = {
             }
           }
 
+          if (context.debug) {
+            console.log('PUT!', key, value)
+          }
           await context.store.put(key, value)
 
           if (context.callingNamespace) {
@@ -1263,13 +1350,73 @@ const ops = {
 
           //console.log('GETI:', namespace + context.stack[context.stack.length - 1], '=', val)
 
-          context.stack.push(val)
+          context.stackPush(val)
         } else {
           throw new Error(`invalid stack (size ${context.stack.length}) on GET operator`)
         }
       } else {
         throw new Error(`cannot GETI on an undefined namespace`)
       }
+    }
+  },
+
+  DEL: {
+    comment: 'Deletes a value from the store with its key being the top of the stack',
+    code: 0x73,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.DEL.code),
+    unpackParams: [],
+    run: async (context) => {
+      let currentNamespace = context.namespace
+      if (context.currentLineContext) {
+        currentNamespace = context.currentLineContext
+      }
+
+      if (currentNamespace) {
+        if (context.stack.length > 0) {
+          let namespace = currentNamespace + '/'
+          let key = namespace + context.stack[context.stack.length - 1]
+
+          if (context.callingNamespace && !currentNamespace.startsWith(context.callingNamespace)) {
+            let owner = await context.store.get(key + '.owner')
+
+            if (owner && owner !== context.callingNamespace) {
+              throw new Error(`key owned by ${owner}, cannot DEL`)
+            }
+          }
+
+          if (context.debug) {
+            console.log('Deleting', key)
+          }
+
+          await context.store.del(key)
+
+          if (context.callingNamespace) {
+            await context.store.del(key + '.owner')
+          }
+        } else {
+          throw new Error(`invalid stack (size ${context.stack.length}) on DEL operator`)
+        }
+      } else {
+        throw new Error(`cannot DEL on an undefined namespace`)
+      }
+    }
+  },
+
+  DEBUG: {
+    comment: 'Set debug state on or off',
+    code: 0xFC,
+    validate: (elems) => forceArgs(elems, ['string']),
+    build: (state) => Buffer.concat([
+      UInt8Buf(ops.DEBUG.code),
+      StringBuf(state)
+    ]),
+    unpackParams: ['string'],
+    run: (state, context) => {
+      if (state === 'test') {
+        console.log('----->', context.stack)
+      }
+      context.debug = state === 'on'
     }
   },
 
@@ -1282,7 +1429,7 @@ const ops = {
     ]),
     unpackParams: [],
     run: (context) => {
-      console.log('LOG:', context.stack.pop())
+      console.log('LOG:', context.stackPop())
     }
   },
   LOG: {

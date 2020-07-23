@@ -6,12 +6,20 @@ const store = {
     if (store.verbose) {
       console.log('GET:', key, store.values)
     }
-    let r = store.values[key]
+    let r
+
+    if (key in store.newValues) {
+      r = store.newValues[key]
+    } else {
+      r = store.values[key]
+    }
 
     if (typeof(r) === 'object') {
       if ('_t' in r && '_v' in r) {
-        if (r._t === 'uint64le') {
-          r = Buffer.from(r._v, 'hex').readBigUInt64LE()
+        /*if (r._t === 'uint64le') {
+          r = Buffer.from(r._v, 'hex').readBigUInt64LE()*/
+        if (r._t === 'uint64') {
+            r = BigInt(r._v)
         } else if (r._t === 'buffer') {
           r = Buffer.from(r._v, 'hex')
         }
@@ -22,9 +30,10 @@ const store = {
   },
   put: (key, value) => {
     if (typeof(value) === 'bigint') {
-      let b = Buffer.alloc(8)
+      /*let b = Buffer.alloc(8)
       b.writeBigUInt64LE(value)
-      value = {_t: 'uint64le', _v: b.toString('hex')}
+      value = {_t: 'uint64le', _v: b.toString('hex')}*/
+      value = {_t: 'uint64', _v: value.toString()}
     } else if (Buffer.isBuffer(value)) {
       value = {_t: 'buffer', _v: value.toString('hex')}
     }
@@ -33,6 +42,15 @@ const store = {
       store.newValues[key] = value
     } else {
       store.values[key] = value
+    }
+  },
+  del: (key) => {
+    if (key in store.newValues) {
+      delete store.newValues[key]
+    }
+
+    if (key in store.values) {
+      delete store.values[key]
     }
   },
   start: () => {
