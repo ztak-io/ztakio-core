@@ -413,7 +413,7 @@ const ops = {
     validate: (elems) => forceArgs(elems, ['identifier']),
     relocateStrategy: 'move',
     build: (label, context) => Buffer.concat([
-      UInt8Buf(ops.JLZ.code),
+      UInt8Buf(ops.JGZ.code),
       LineOfCodeBuf(context.findLabel(label))
     ]),
     unpackParams: ['uint16'],
@@ -665,7 +665,8 @@ const ops = {
 
       if (context.stack.length > 0) {
         let keyRoot = context.currentLineContext + '/'
-        let re = new RegExp(keyRoot + context.stackPop())
+        let redef = (keyRoot + context.stackPop()).replace(/\//g, '\\/')
+        let re = new RegExp(redef)
         let gen = context.store.iterator({ gt: keyRoot })
 
         let result = gen.next()
@@ -906,14 +907,14 @@ const ops = {
       if (context.stack.length > 0) {
         const callee = context.stack[0]
 
+        if (context.debug) {
+          console.log('PUSHPR parent Stack regs: ', callee.registers)
+        }
+
         if (typeof(callee) === 'object') {
           if (ident in callee.registers)  {
             context.stackPush(callee.registers[ident])
           } else {
-            if (context.debug) {
-              console.log(context.stack)
-            }
-
             console.log(callee.registers)
             throw new Error(`invalid callee register ${ident} on PUSHPR: Available ${Object.keys(callee.registers)}`)
           }

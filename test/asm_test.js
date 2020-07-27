@@ -80,7 +80,7 @@ async function test() {
 
   const dexAskOrder = async (owner, get, give, txid) => {
     let context = ztak.asm.createContext(ut, store, owner, txid)
-    context.loadProgram(createDexOrder(get, give, 'ask'))
+    context.loadProgram(createDexOrder(give, get, 'ask'))
     try {
       await ztak.asm.execute(context)
     } catch (e) {
@@ -133,7 +133,9 @@ async function test() {
   //await dexBidOrder(recipient1, 9, 21, 'qwe') // Equal
   await dexBidOrder(recipient1, 4, 9, 'qwe') // Bid lower
   await dexBidOrder(recipient1, 4, 9, 'qwe1') // Bid lower
-  await dexBidOrder(recipient1, 4, 9, 'qwe2') // Bid lower*/
+  await dexBidOrder(recipient1, 4, 9, 'qwe2') // Bid lower
+  console.log('Trying to match ask')
+  await dexAskOrder(recipient2, 21, 9, 'asd2')
 
   //await dexBidOrder(recipient1, 2, 3, 'hee')
 

@@ -1,7 +1,8 @@
 module.exports = `
-CODE ::= ((comment | label | op)? (WS comment)? NL)*
+CODE ::= (EMPTY? (comment | label | op)? (WS comment)? NL)*
 
 comment ::= "#" WS? alphanumeric
+EMPTY ::= WS*
 label ::= ":" alphanumeric
 op ::= WS? identifier (WS (pathext | path | identifier | number | string))*
 
