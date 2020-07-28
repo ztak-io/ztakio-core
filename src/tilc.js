@@ -1,0 +1,548 @@
+const fs = require('fs')
+const Grammars = require('ebnf').Grammars
+const grammar = fs.readFileSync('./src/til_lang_spec.ebnf', 'utf8')
+const util = require('util')
+
+function collect(ast) {
+
+}
+
+function parse(code) {
+  const parser = new Grammars.W3C.Parser(grammar)
+  const compiled = parser.getAST(code)
+
+  if (compiled) {
+    return compiled
+  } else {
+    console.log(parser)
+  }
+}
+
+const printables = {
+  'identifier': true,
+  'number': true,
+  'string': true,
+  'path': true,
+  'operator': true,
+  'func_qualification': true,
+  'namespace_op': true,
+  'declaration_qualification': true
+}
+function printAst(elem, lvl, prevWs) {
+  let ws
+
+  if (lvl > 0) {
+    ws = new Array(lvl).fill("  ").join("")
+  } else {
+    ws = ''
+  }
+
+  let txt = ws + elem.type
+  if (elem.type in printables) {
+    txt += ': ' + elem.text
+  }
+  console.log(txt)
+
+  for (let i=0; i < elem.children.length; i++) {
+    printAst(elem.children[i], lvl + 1)
+  }
+}
+
+function $(node, path, dumpNode) {
+  let spl = path.split('/')
+  let inspectNode = node
+
+  while (step = spl.shift()) {
+    let found = false
+    for (let i=0; i < inspectNode.children.length; i++) {
+      let child = inspectNode.children[i]
+
+      if (child.type === step) {
+        if (spl.length > 0) {
+          inspectNode = child
+          found = true
+          break
+        } else {
+          if (dumpNode) {
+            return child
+          } else {
+            return child.text
+          }
+        }
+      }
+    }
+
+    if (!found) {
+      //console.log(`Invalid path ${path} on node ${node.type}`)
+      return null
+    }
+  }
+}
+
+function operatorToAsm(op, gen) {
+  const simpleOps = {
+    '*': 'MUL',
+    '/': 'DIV',
+    '%': 'MOD',
+    '+': 'PLUS',
+    '-': 'MINUS',
+    '<<': 'SHL',
+    '>>': 'SHR',
+
+    '&': 'AND',
+    '|': 'OR',
+    '^': 'XOR',
+
+    '&&': 'ANDL',
+    '||': 'ORL',
+
+    '==': 'EQ',
+    '!=': 'NEQ',
+    '<': 'LT',
+    '<=': 'LTE',
+    '>': 'GT',
+    '>=': 'GTE',
+  }
+
+  if (op in simpleOps) {
+    gen(simpleOps[op])
+  } else {
+    console.log('Not simple op:', op)
+  }
+}
+
+const precedence = {
+  operator: [
+    ['*', '/', '%'],
+    ['+', '-'],
+    ['<<', '>>'],
+    ['<', '<=', '>', '>='],
+    ['==', '!='],
+    ['&'],
+    ['^'],
+    ['|'],
+    ['&&'],
+    ['^^'],
+    ['||']
+  ]
+}
+function findPrecedence(op, arr) {
+  for (let i=0; i < arr.length; i++) {
+    if (arr[i].indexOf(op) >= 0) {
+      return i
+    }
+  }
+  throw Error(`Invalid operator "${op}"`)
+}
+function flattenBsp(arr) {
+  if (!Array.isArray(arr)) {
+    arr = [arr]
+  }
+  let result = []
+  for (let i=0; i < arr.length; i++) {
+    let node = arr[i]
+    if (node.left && node.left.length > 0) {
+      result = result.concat(flattenBsp(node.left))
+    }
+
+    if (node.right && node.right.length > 0) {
+      result = result.concat(flattenBsp(node.right))
+    }
+
+    result.push({type: node.type, value: node.value})
+  }
+
+  return result
+}
+function bspOps(ops) {
+  if (ops.length < 2) {
+    return ops
+  }
+
+  let maxPrecedence = -1
+  let pivotIndex = -1
+  for (let i=0; i < ops.length; i++) {
+    let item = ops[i]
+    if (!('p' in item) && item.type in precedence) {
+      item.p = findPrecedence(item.value, precedence[item.type])
+    }
+
+    if (item.p > maxPrecedence) {
+      pivotIndex = i
+      maxPrecedence = item.p
+    }
+  }
+
+  let result = ops[pivotIndex]
+  if (pivotIndex >= 0) {
+    result.left = bspOps(ops.slice(0, pivotIndex))
+    result.right = bspOps(ops.slice(pivotIndex + 1))
+  }
+
+  return flattenBsp(result)
+}
+
+const reservedIdentifiers = {
+  caller: true, owner: true, height: true, txid: true, callingnamespace: true,
+  return: true, search: true, require: true, const: true
+}
+let firstFuncdefParsed = false
+let currentFuncContext = null
+let currentLine = 0
+
+const pushIdent = (type, value) => {
+  if (type === 'number') {
+    return `PUSHI ${value}`
+  } else if (type === 'string') {
+    return `PUSHS ${value}`
+  } else if (value in reservedIdentifiers) {
+    return `PUSHV ${value}`
+  } else if (value in currentFuncContext.regs) {
+    return `PUSHR ${value}`
+  } else if (value in currentFuncContext.consts) {
+    return `PUSHCI ${value}`
+  } else {
+    return `PUSHPR ${value}`
+  }
+}
+
+const funcCall = (gen, callMember) => {
+  const path = $(callMember, 'path')
+  const identifier = $(callMember, 'identifier')
+  const params = $(callMember, 'params', true)
+
+  if (params) {
+    for (let i=0; i < params.children.length; i++) {
+      let item = params.children[i]
+      if (item.type === 'basevalue') {
+        item = item.children[0]
+        if (item.type === 'call_member') {
+          funcCall(gen, item)
+        } else {
+          gen(pushIdent(item.type, item.text))
+        }
+      } else {
+        gen(pushIdent(item.type, item.text))
+      }
+    }
+  }
+
+  if (path) {
+    gen(`ECALL ${path}.${identifier}`)
+  } else {
+    gen(`CALL ${identifier}`)
+  }
+}
+
+const genOps = (ops, gen) => {
+  for (let i=0; i < ops.length; i++) {
+    let item = ops[i]
+
+    if (item.type === 'operator') {
+      operatorToAsm(item.value, gen)
+    } else if (item.type === 'identifier' || item.type === 'number' || item.type === 'string') {
+      gen(pushIdent(item.type, item.value))
+    } else {
+      throw Error(`Unknown item type in operation "${item.type}"`)
+    }
+  }
+}
+
+const decoders = {
+  namespace: (node, gen) => {
+    let op = $(node, 'namespace_op')
+    let path = $(node, 'path')
+
+    if (op === 'define') {
+      gen(`NAMESPACE ${path}`)
+      return {tail: [$(node, 'object', true)]}
+    } else if (op === 'using') {
+      gen(`REQUIRE ${path}`)
+      return {tail: [$(node, 'object', true)]}
+    }
+  },
+
+  object: (node) => ({head: node.children}),
+  member: (node) => ({head: node.children}),
+  value_member: (node, gen) => {
+    let identifier = $(node, 'identifier')
+    let path = $(node, 'path')
+
+    if (identifier) {
+      if (identifier === 'meta') {
+        let value = $(node, 'value/object', true)
+
+        for (let i=0; i < value.children.length; i++) {
+          let child = value.children[i]
+          gen(`META ${$(child, 'value_member/identifier')} ${$(child, 'value_member/value').trim()}`)
+        }
+      }
+    } else if (path) {
+      console.trace('/path = value not implemented!')
+    }
+  },
+
+  funcdef: (node, gen) => {
+    const qual = $(node, 'func_qualification')
+
+    if (qual === 'entry') {
+      const name = $(node, 'identifier')
+      gen(`ENTRY "${name}" ${name}_label`)
+    }
+    node.type = 'funcdef_declared'
+    let result = [node]
+
+    if (!firstFuncdefParsed) {
+      firstFuncdefParsed = true
+      result = [{type: 'end_preamble'}].concat(result)
+    }
+    return {tail: result}
+  },
+
+  end_preamble: (node, gen) => {
+    gen('RET 0 # end_preamble')
+  },
+
+  funcdef_declared: (node, gen) => {
+    const name = $(node, 'identifier')
+    const params = $(node, 'func_params', true)
+    const qualification = $(node, 'func_qualification')
+    gen(`${name}_label:`)
+    if (qualification === 'owner') {
+      gen(`OWNER`)
+    } else if (qualification === 'enum') {
+      if (params.children.length !== 2) {
+        throw new Error('Enum functions must have two parameters for the key and value being enumerated')
+      }
+    }
+    currentFuncContext = { name, regs: {}, consts: {} }
+    for (let i=params.children.length-1; i >= 0; i--) {
+      let reg = params.children[i].text
+      if (reg in reservedIdentifiers) {
+        throw new Error(`Trying to used reserved identifier "${reg}" as parameter on function "${name}"`)
+      }
+
+      gen(`POP ${reg}`)
+      currentFuncContext.regs[reg] = reg
+    }
+
+    return {head: node.children.filter(x => x.type === 'member').concat({type: 'null_ret'})}
+  },
+
+  null_ret: (node, gen) => {
+    if (currentFuncContext && !currentFuncContext.returned) {
+      gen('RET 0')
+      currentFuncContext = null
+    }
+  },
+
+  require_member: (node, gen) => {
+    gen(`REQUIRE ${$(node, 'path')}`)
+  },
+
+  declaration_member: (node, gen) => {
+    if (!currentFuncContext) {
+      throw new Error('Declaration outside of a function context is not valid')
+    }
+
+    const qual = $(node, 'declaration_qualification')
+    let ident = $(node, 'identifier')
+    const identParams = $(node, 'identifier_list', true)
+    const declValue = $(node, 'declared_value', true)
+
+    if (!qual) {
+      if (declValue.children[0].type === 'basevalue') {
+        // it's a basic value
+        const { type, text } = declValue.children[0].children[0]
+        if (type === 'number' || type === 'string') {
+          gen(pushIdent(type, text))
+        } else if (type === 'op') {
+          genOps(declValue.children[0].children[0].children.map(x => ({type: x.type, value: x.text})), gen)
+        } else {
+          const callMember = declValue.children[0].children[0]
+          funcCall(gen, callMember)
+        }
+      } else if (declValue.children[0].type === 'identifier') {
+        // It's a registry, special value or constant
+        const { type, text } = declValue.children[0]
+        gen(pushIdent(type, text))
+      }
+    } else if (qual === 'const') {
+      const { type, text } = declValue.children[0].children[0]
+      if (type === 'number') {
+        gen(`CONSTI ${ident} ${text}`)
+        currentFuncContext.consts[ident] = text
+        ident = null
+      } else {
+        throw new Error(`Constants of type ${type} not supported`)
+      }
+    } else {
+      throw new Error(`Declaration qualifier ${qual} not recognized`)
+    }
+
+    if (ident) {
+      gen(`POP ${ident}`)
+      currentFuncContext.regs[ident] = true
+    } else if (identParams) {
+      for (let i=identParams.children.length - 1; i >= 0; i--) {
+        let item = identParams.children[i]
+
+        if (item.type === 'identifier') {
+          gen(`POP ${item.text}`)
+        } else {
+          throw new Error('Left side must be only identifiers in an assignation')
+        }
+      }
+    }
+  },
+
+  call_member: (node, gen) => {
+    funcCall(gen, node)
+  },
+
+  if_member: (node, gen) => {
+    let head = []
+    const genLabel = (concept) => `${currentFuncContext.name}_ifjmp_${currentLine}_${concept}`
+
+    const endLabel = genLabel('end')
+    const jumpBlocks = node.children.filter(x => x.type === 'if_block').map((x, idx) => {
+      return {
+        type: 'labeled_block',
+        label: genLabel(idx),
+        endLabel,
+        content: $(x, 'object', true)
+      }
+    })
+
+    const conditions = node.children.filter(x => x.type === 'if_block').map(x => $(x, 'if_condition', true))
+    for (let i=0; i < conditions.length; i++) {
+      const jmpLabel = genLabel(i)
+      const op = $(conditions[i], 'op', true)
+      //console.log('---->', op)
+      genOps(op.children.map(x => ({type: x.type, value: x.text})), gen)
+      gen(`JCND ${genLabel(i)}`)
+    }
+
+    const elseBlock = $(node, 'else_block', true)
+
+
+    if (elseBlock) {
+      head.push({
+        type: 'labeled_block',
+        label: genLabel('else'),
+        endLabel: endLabel,
+        content: $(elseBlock, 'object', true)
+      })
+    } else {
+      head.push({ type: 'code', value: `JMP ${endLabel}` })
+    }
+
+    head = head.concat(jumpBlocks)
+
+    head.push({ type: 'if_end_block', label: endLabel })
+    return { head }
+  },
+
+  code: (node, gen) => {
+    gen(node.value)
+  },
+
+  if_end_block: (node, gen) => {
+    gen(`${node.label}:`, true)
+  },
+
+  labeled_block: (node, gen) => {
+    gen(`${node.label}:`, true)
+    return { head: node.content.children.concat([{ type: 'code', value: `JMP ${node.endLabel}` }]) }
+  },
+
+  return_member: (node, gen) => {
+    const returnValues = $(node, 'basevalue_list', true)
+
+    if (returnValues) {
+      const values = returnValues.children.map(x => {
+        let child = x.children[0]
+        if (child.type === 'basevalue') {
+          child = child.children[0]
+        }
+        return child
+      })
+
+      for (let i=0; i < values.length; i++) {
+        let item = values[i]
+        if (item.type === 'call_member') {
+          funcCall(gen, item)
+          const funcParams = $(item, "params", true)
+
+          if (funcParams) {
+            gen(`POP _ret_tmp_`)
+            for (let i=0; i < funcParams.children.length; i++) {
+              gen(`POP _`)
+            }
+            gen(`PUSHR _ret_tmp_`)
+          }
+        } else {
+          gen(pushIdent(item.type, item.text))
+        }
+      }
+      gen(`RET ${values.length}`)
+    } else {
+      gen(`RET 0`)
+      currentFuncContext.returned = true
+    }
+  }
+}
+
+function decodeAst(node) {
+  let tail = [node]
+  const gen = (line, noIndent) => {
+    if (!noIndent && currentFuncContext !== null) {
+      line = '  ' + line
+    }
+    console.log(line)
+  }
+
+  let l = 1
+  while (step = tail.shift()) {
+    currentLine = l
+    if (step.type in decoders) {
+      let result
+      try {
+        result = decoders[step.type](step, gen)
+      } catch(e) {
+        //throw new Error(`At line ${l}: ${e.message}`)
+        console.log(`At line ${l}: ${e.message}`)
+      }
+
+      if (result) {
+        if (result.head) {
+          tail = result.head.concat(tail)
+        }
+
+        if (result.tail) {
+          tail = tail.concat(result.tail)
+        }
+      }
+    } else {
+      console.log(`Unknown AST type ${step.type} on node ${node.type}`)
+    }
+    l++
+  }
+}
+
+function test() {
+  const fs = require('fs')
+  const code = fs.readFileSync('./test/data/test.til', 'utf8')
+  const ast = parse(code)
+  if (ast) {
+    //printAst(ast, 0, 0)
+    decodeAst(ast)
+    //fs.writeFileSync('output.json', JSON.stringify(program))
+  } else {
+    console.log('Parse error')
+  }
+}
+
+if (require.main === module) {
+  test()
+}

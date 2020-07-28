@@ -11,6 +11,7 @@
     "bitcoinjs-lib": "^5.1.8",
     "bitcoinjs-message": "^2.1.0",
     "ebnf": "^1.7.4",
+    "fengari": "^0.1.4",
     "json-bigint": "^0.3.0"
   },
   "devDependencies": {
@@ -19,6 +20,7 @@
   },
   "scripts": {
     "dev": "nodemon src/index.js",
+    "devTilc": "nodemon -e js,til,ebnf src/tilc.js",
     "devAsm": "nodemon test/asm_test.js",
     "devEnvelope": "nodemon test/envelope_test.js",
     "devMessaging": "nodemon test/messaging_test.js",

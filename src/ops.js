@@ -556,7 +556,8 @@ const ops = {
     }
   },
 
-  ITER: {
+  // This opcode is rubbish, it's very complicated to use and it's a disguised for-loop
+  /*ITER: {
     comment: 'Iterates calls to the given label pushing the index into the stack. Stack top must be [..., start, end, step, 0]. Step > 0. Called label must return -1 or 1 to break iteration, 0 to continue to the next value.',
     code: 0x1B,
     validate: (elems) => forceArgs(elems, ['identifier']),
@@ -592,7 +593,7 @@ const ops = {
         throw new Error(`invalid stack size (${context.stack.length}) on ITER operator (must be at least 4)`)
       }
     }
-  },
+  },*/
 
   ENUM: {
     comment: 'Enumerates values in a namespace. Regular expression is popped from the stack. Matching groups are pushed into each call to the label passed as parameter.',
@@ -709,6 +710,33 @@ const ops = {
         }
       } else {
         throw new Error(`invalid stack size (${context.stack.length}) on ENUM operator (must be at least 1)`)
+      }
+    }
+  },
+
+  // TODO: This opcode could replace all the JGZ, JLZ calls with arithmetics
+  // and is the only one used by the high level language anyways
+  JCND: {
+    comment: 'Jumps to a given label if the top value of the stack is true',
+    code: 0x1E,
+    validate: (elems) => forceArgs(elems, ['identifier']),
+    relocateStrategy: 'move',
+    build: (label, context) => Buffer.concat([
+      UInt8Buf(ops.JCND.code),
+      LineOfCodeBuf(context.findLabel(label))
+    ]),
+    unpackParams: ['uint16'],
+    run: (line, context) => {
+      if (line <= context.line) {
+        throw new Error(`cannot call line ${line} from line ${context.line}`)
+      }
+
+      if (context.stack.length > 0) {
+        if (context.stack[context.stack.length - 1] === true) {
+          context.line = line - 1
+        }
+      } else {
+        throw new Error(`invalid empty stack on JGZ operator`)
       }
     }
   },
@@ -1083,7 +1111,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(a - b)
+        context.stackPush(b - a)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MINUS operator`)
       }
@@ -1186,6 +1214,142 @@ const ops = {
         context.stackPush(a ^ b)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on XOR operator`)
+      }
+    }
+  },
+
+  EQ: {
+    comment: 'Pops and compares for equality the top 2 values of the stack. Pushes the result into the stack.',
+    code: 0x48,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.EQ.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(a === b)
+      } else {
+        throw new Error(`invalid stack (size ${context.stack.length}) on EQ operator`)
+      }
+    }
+  },
+
+  NEQ: {
+    comment: 'Pops and compares for inequality the top 2 values of the stack. Pushes the result into the stack.',
+    code: 0x49,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.NEQ.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(a !== b)
+      } else {
+        throw new Error(`invalid stack (size ${context.stack.length}) on NEQ operator`)
+      }
+    }
+  },
+
+  LT: {
+    comment: 'Pops and compares "<" the top values of the stack (n-1 < n). Pushes the result into the stack.',
+    code: 0x4A,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.LT.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(b < a)
+      } else {
+        throw new Error(`invalid stack (size ${context.stack.length}) on LT operator`)
+      }
+    }
+  },
+
+  LTE: {
+    comment: 'Pops and compares "<=" the top values of the stack (n-1 <= n). Pushes the result into the stack.',
+    code: 0x4B,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.LTE.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(b <= a)
+      } else {
+        throw new Error(`invalid stack (size ${context.stack.length}) on LTE operator`)
+      }
+    }
+  },
+
+  GT: {
+    comment: 'Pops and compares ">" the top values of the stack (n-1 > n). Pushes the result into the stack.',
+    code: 0x4C,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.GT.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(b > a)
+      } else {
+        throw new Error(`invalid stack (size ${context.stack.length}) on GT operator`)
+      }
+    }
+  },
+
+  GTE: {
+    comment: 'Pops and compares ">=" the top values of the stack (n-1 >= n). Pushes the result into the stack.',
+    code: 0x4D,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.GTE.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(b >= a)
+      } else {
+        throw new Error(`invalid stack (size ${context.stack.length}) on GTE operator`)
+      }
+    }
+  },
+
+  ANDL: {
+    comment: 'Pops and compares "&&" the top two values of the stack. Pushes the result into the stack.',
+    code: 0x4E,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.ANDL.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(b && a)
+      } else {
+        throw new Error(`invalid stack (size ${context.stack.length}) on ANDL operator`)
+      }
+    }
+  },
+
+  ORL: {
+    comment: 'Pops and compares "||" the top two values of the stack. Pushes the result into the stack.',
+    code: 0x4F,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.ORL.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let a = context.stackPop()
+        let b = context.stackPop()
+        context.stackPush(b || a)
+      } else {
+        throw new Error(`invalid stack (size ${context.stack.length}) on ORL operator`)
       }
     }
   },
