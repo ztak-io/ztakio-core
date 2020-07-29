@@ -48,7 +48,10 @@ function printAst(elem, lvl, prevWs) {
   }
 }
 
-function $(node, path, dumpNode) {
+function $(node, path, dumpNode, skip) {
+  if (typeof(skip) === "undefined") {
+    skip = 0
+  }
   let spl = path.split('/')
   let inspectNode = node
 
@@ -63,10 +66,14 @@ function $(node, path, dumpNode) {
           found = true
           break
         } else {
-          if (dumpNode) {
-            return child
+          if (skip == 0) {
+            if (dumpNode) {
+              return child
+            } else {
+              return child.text
+            }
           } else {
-            return child.text
+            skip--
           }
         }
       }
@@ -488,6 +495,16 @@ const decoders = {
   labeled_block: (node, gen) => {
     gen(`${node.label}:`, true)
     return { head: node.content.children.concat([{ type: 'code', value: `JMP ${node.endLabel}` }]) }
+  },
+
+  enum_member: (node, gen) => {
+    const ident = $(node, "identifier")
+    const regex = $(node, "string")
+    const order = {"+": "asc", "-": "desc"}[$(node, "enum_order")]
+    const field = $(node, "identifier", false, 1)
+
+    gen(`PUSHS "${regex}"`)
+    gen(`ENUMORD ${ident}_label "${field}" "${order}"`)
   },
 
   return_member: (node, gen) => {

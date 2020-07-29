@@ -34,5 +34,10 @@ define /weird {
 
   func test() {
     a.x.y.z = b.z + 12
+    teste@"([a-zA-Z0-9]+)/usd$"-rate
+  }
+
+  enum teste(key, value) {
+
   }
 }

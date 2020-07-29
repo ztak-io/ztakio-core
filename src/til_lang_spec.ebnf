@@ -17,7 +17,7 @@ null                 ::= "null"
 true                 ::= "true"
 temp_object               ::= BEGIN_OBJECT (member (VALUE_SEPARATOR member)*)? END_OBJECT
 object               ::= BEGIN_OBJECT member* END_OBJECT
-member               ::= WS* (return_member | if_member | require_member | call_member | funcdef | value_member | declaration_member) WS*
+member               ::= WS* (return_member | if_member | enum_member | require_member | call_member | funcdef | value_member | declaration_member) WS*
 number                ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? (("e" | "E") ( "-" | "+" )? ("0" | [1-9] [0-9]*))?
 
 op ::= (false | null | true | object | object_ref | number | string | identifier | call_member) (WS* operator WS* (false | null | true | object | object_ref | number | string | identifier | call_member))+
@@ -51,6 +51,9 @@ funcdef ::= (func_qualification WS+)* identifier BEGIN_CALL func_params? END_CAL
 func_qualification ::= ("entry" | "func" | "enum" | "owner")
 
 object_ref ::= identifier ("." identifier)+
+
+enum_member ::= identifier "@" string enum_order identifier
+enum_order ::= ("+" | "-")
 
 identifier ::= LETTER (PLAINNUMBER | LETTER)*
 path ::= (#x2F identifier)+
