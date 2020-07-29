@@ -7,6 +7,7 @@ define /weird {
 
   entry bid(give, get) {
     require /usd
+
     const RATE_PRECISION = 1212124124
     test = 12
     w = /usd.fun_xyz(y, test, 32)
@@ -29,5 +30,9 @@ define /weird {
     } else {
       t = 3
     }
+  }
+
+  func test() {
+    a.x.y.z = b.z + 12
   }
 }

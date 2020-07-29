@@ -901,9 +901,9 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let first = context.stack[context.stack.length - 1]
+        let first = context.stackPop()
         context.stackPop()
-        context.stack[context.stack.length - 1] = first
+        context.stackPush(first)
       } else {
         throw new Error(`invalid stack size ${context.stack.length} on SINK`)
       }
@@ -1021,7 +1021,7 @@ const ops = {
   },
 
   GETO: {
-    comment: 'Pops the key from the stack, gets the correpsonding value from the dictionary in the resulting top.',
+    comment: 'Pops the key from the stack, gets the corresponding value from the dictionary in the resulting top.',
     code: 0x30,
     validate: (elems) => [],
     build: (ident) => UInt8Buf(ops.GETO.code),

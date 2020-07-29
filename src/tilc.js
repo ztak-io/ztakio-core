@@ -234,7 +234,28 @@ const funcCall = (gen, callMember) => {
   }
 }
 
+const getSetObj = (path, gen, isSet) => {
+  let [base, ...spl] = path.split('.')
+  gen(pushIdent('', base))
+  let first = true
+  while (item = spl.shift()) {
+    if (isSet && !first) {
+      gen(`SINK`)
+    }
+    gen(`PUSHS "${item}"`)
+    if (!((spl.length === 0) && isSet)) {
+      gen(`GETO`)
+    }
+    first = false
+  }
+
+  if (!isSet) {
+    gen(`SINK`)
+  }
+}
+
 const genOps = (ops, gen) => {
+  ops = bspOps(ops)
   for (let i=0; i < ops.length; i++) {
     let item = ops[i]
 
@@ -242,6 +263,8 @@ const genOps = (ops, gen) => {
       operatorToAsm(item.value, gen)
     } else if (item.type === 'identifier' || item.type === 'number' || item.type === 'string') {
       gen(pushIdent(item.type, item.value))
+    } else if (item.type === 'object_ref') {
+      getSetObj(item.value, gen, false)
     } else {
       throw Error(`Unknown item type in operation "${item.type}"`)
     }
@@ -258,6 +281,7 @@ const decoders = {
       return {tail: [$(node, 'object', true)]}
     } else if (op === 'using') {
       gen(`REQUIRE ${path}`)
+      currentFuncContext = { name: '_root_', regs: {}, consts: {} }
       return {tail: [$(node, 'object', true)]}
     }
   },
@@ -316,14 +340,16 @@ const decoders = {
       }
     }
     currentFuncContext = { name, regs: {}, consts: {} }
-    for (let i=params.children.length-1; i >= 0; i--) {
-      let reg = params.children[i].text
-      if (reg in reservedIdentifiers) {
-        throw new Error(`Trying to used reserved identifier "${reg}" as parameter on function "${name}"`)
-      }
+    if (params) {
+      for (let i=params.children.length-1; i >= 0; i--) {
+        let reg = params.children[i].text
+        if (reg in reservedIdentifiers) {
+          throw new Error(`Trying to used reserved identifier "${reg}" as parameter on function "${name}"`)
+        }
 
-      gen(`POP ${reg}`)
-      currentFuncContext.regs[reg] = reg
+        gen(`POP ${reg}`)
+        currentFuncContext.regs[reg] = reg
+      }
     }
 
     return {head: node.children.filter(x => x.type === 'member').concat({type: 'null_ret'})}
@@ -349,6 +375,11 @@ const decoders = {
     let ident = $(node, 'identifier')
     const identParams = $(node, 'identifier_list', true)
     const declValue = $(node, 'declared_value', true)
+    const objectAssignRef = $(node, 'object_ref')
+
+    if (objectAssignRef) {
+      getSetObj(objectAssignRef, gen, true)
+    }
 
     if (!qual) {
       if (declValue.children[0].type === 'basevalue') {
@@ -358,7 +389,9 @@ const decoders = {
           gen(pushIdent(type, text))
         } else if (type === 'op') {
           genOps(declValue.children[0].children[0].children.map(x => ({type: x.type, value: x.text})), gen)
-        } else {
+        } else if (type === 'object_ref') {
+          getSetObj(text, gen, false)
+        } else if (type === 'call_member') {
           const callMember = declValue.children[0].children[0]
           funcCall(gen, callMember)
         }
@@ -393,6 +426,8 @@ const decoders = {
           throw new Error('Left side must be only identifiers in an assignation')
         }
       }
+    } else if (objectAssignRef) {
+      gen(`SETO`)
     }
   },
 
@@ -424,7 +459,6 @@ const decoders = {
     }
 
     const elseBlock = $(node, 'else_block', true)
-
 
     if (elseBlock) {
       head.push({
@@ -511,7 +545,7 @@ function decodeAst(node) {
         result = decoders[step.type](step, gen)
       } catch(e) {
         //throw new Error(`At line ${l}: ${e.message}`)
-        console.log(`At line ${l}: ${e.message}`)
+        console.log(`At op ${l}:`, e)
       }
 
       if (result) {

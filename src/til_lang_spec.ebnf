@@ -1,7 +1,7 @@
 namespace ::= namespace_op WS+ path object
 namespace_op ::= ("define" | "using")
-value                ::= (op | false | null | true | object | number | string | member)
-basevalue ::= (op | false | null | true | object | number | string | call_member )
+value                ::= (op | false | null | true | object | object_ref | number | string | member)
+basevalue ::= (op | false | null | true | object | object_ref | number | string | call_member )
 BEGIN_OBJECT         ::= WS* #x7B WS*  /* { left curly bracket */
 END_OBJECT           ::= WS* #x7D WS*  /* } right curly bracket */
 BEGIN_CALL         ::= WS* "(" WS*
@@ -20,14 +20,14 @@ object               ::= BEGIN_OBJECT member* END_OBJECT
 member               ::= WS* (return_member | if_member | require_member | call_member | funcdef | value_member | declaration_member) WS*
 number                ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? (("e" | "E") ( "-" | "+" )? ("0" | [1-9] [0-9]*))?
 
-op ::= (false | null | true | object | number | string | identifier | call_member) (WS* operator WS* (false | null | true | object | number | string | identifier | call_member))+
-operator ::= (#x2B | #x2D | #x2A | #x2F | #x7C | #x26 | #x5E | #x25 | #x5E #x5E | #x7C #x7C | #x26 #x26 | #x3D #x3D | #x3C #x3D | #x3E #x3D | #x21 #x3D | #x3E | #x3C)
+op ::= (false | null | true | object | object_ref | number | string | identifier | call_member) (WS* operator WS* (false | null | true | object | object_ref | number | string | identifier | call_member))+
+operator ::= (#x2B | #x2D | #x2A | #x2F | #x7C | #x26 | #x5E | #x25 | #x3E #x3E | #x3E | #x3C #x3C | #x3C | #x5E #x5E | #x7C #x7C | #x26 #x26 | #x3D #x3D | #x3C #x3D | #x3E #x3D | #x21 #x3D)
 
 params ::= WS* (basevalue | identifier) WS* ("," WS* (basevalue | identifier) WS*)*
 func_params ::= WS* identifier WS* ("," WS* identifier WS*)*
 
 value_member ::= (identifier | path) NAME_SEPARATOR value
-declaration_member ::= (declaration_qualification WS+)? (identifier_list | identifier) ASSIGN_SEPARATOR declared_value
+declaration_member ::= (declaration_qualification WS+)? (identifier_list | object_ref | identifier) ASSIGN_SEPARATOR declared_value
 
 identifier_list ::= WS* identifier (WS* "," WS* identifier)+
 
@@ -49,6 +49,8 @@ call_member ::= (path ".")? identifier BEGIN_CALL params? END_CALL
 
 funcdef ::= (func_qualification WS+)* identifier BEGIN_CALL func_params? END_CALL BEGIN_OBJECT (WS* member WS*)* END_OBJECT
 func_qualification ::= ("entry" | "func" | "enum" | "owner")
+
+object_ref ::= identifier ("." identifier)+
 
 identifier ::= LETTER (PLAINNUMBER | LETTER)*
 path ::= (#x2F identifier)+
