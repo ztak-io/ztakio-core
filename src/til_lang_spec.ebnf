@@ -12,6 +12,7 @@ VALUE_SEPARATOR      ::= WS* (#x2C | WS | NL)* WS*
 ASSIGN_SEPARATOR       ::= WS* "=" WS*
 NL ::= [#x0A#x0D]+
 WS                   ::= [#x20#x09#x0A#x0D]+   /* Space | Tab | \n | \r */
+NWS                   ::= [#x20#x09]+   /* Space | Tab | \n | \r */
 false                ::= "false"
 null                 ::= "null"
 true                 ::= "true"
@@ -20,13 +21,13 @@ object               ::= BEGIN_OBJECT member* END_OBJECT
 member               ::= WS* (return_member | if_member | enum_member | require_member | call_member | funcdef | value_member | declaration_member) WS*
 number                ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? (("e" | "E") ( "-" | "+" )? ("0" | [1-9] [0-9]*))?
 
-op ::= (false | null | true | object | object_ref | number | string | identifier | call_member) (WS* operator WS* (false | null | true | object | object_ref | number | string | identifier | call_member))+
+op ::= (false | null | true | object | object_ref | number | string | identifier | call_member) (NWS* operator NWS* (false | null | true | object | object_ref | number | string | identifier | call_member))+
 operator ::= (#x2B | #x2D | #x2A | #x2F | #x7C | #x26 | #x5E | #x25 | #x3E #x3E | #x3E | #x3C #x3C | #x3C | #x5E #x5E | #x7C #x7C | #x26 #x26 | #x3D #x3D | #x3C #x3D | #x3E #x3D | #x21 #x3D)
 
 params ::= WS* (basevalue | identifier) WS* ("," WS* (basevalue | identifier) WS*)*
 func_params ::= WS* identifier WS* ("," WS* identifier WS*)*
 
-value_member ::= (identifier | path) NAME_SEPARATOR value
+value_member ::= (identifier | path) NAME_SEPARATOR (value | identifier)
 declaration_member ::= (declaration_qualification WS+)? (identifier_list | object_ref | identifier) ASSIGN_SEPARATOR declared_value
 
 identifier_list ::= WS* identifier (WS* "," WS* identifier)+

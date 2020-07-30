@@ -1,0 +1,71 @@
+define /dex {
+  meta : {
+    Info : {}
+    Name : "Dex"
+    Version : "1.0.0"
+  }
+
+  entry bid(give, get) {
+    require {{{bottom}}}
+    require {{{top}}}
+
+    const RATE_PRECISION = {{{rate_precision}}}
+
+    orderid = base58(sha256(caller + txid))
+    rate = give * RATE_PRECISION / get
+    takerOrderId = orderid + "{{{bottom}}}"
+
+    {{{bottom}}}.escrow(orderid)
+    verify()
+
+    put(takerOrderId, {
+      get: get
+      get_remaining: get
+      give: give
+      give_remaining: give
+      owner: caller
+      get_contract: "{{{top}}}"
+      give_contract: "{{{bottom}}}"
+      rate: rate
+    })
+
+    bidenum@"([a-zA-Z0-9]+){{{top}}}$"+rate
+  }
+
+  enum bidenum(makerOrderId, makerDesc) {
+      const RATE_PRECISION = {{{rate_precision}}}
+
+      if (makerDesc.rate < rate) {
+        escrowedMaker = {{{top}}}.balance(makerOrderId)
+        if (escrowedMaker > 0) {
+          takerDesc = get(takerOrderId)
+          escrowedTaker = {{{bottom}}}.balance(orderid)
+
+          if (escrowedTaker > 0) {
+            getRemainTaker = takerDesc.get_remaining
+            makerAddress = makerDesc.owner
+            getRemainMaker = makerDesc.get_remaining
+
+            if (getRemainTaker < escrowedMaker) {
+              log("1")
+            } else if (getRemainTaker == escrowedMaker) {
+              log("2")
+            } else {
+              log("3")
+            }
+          } else {
+            log("No balance in taker escrow address")
+            return 0
+          }
+        } else {
+          log("No balance in maker escrow address")
+          return 0
+        }
+      } else {
+        log("Maker rate below taker rate")
+        return 0
+      }
+    }
+  }
+
+}

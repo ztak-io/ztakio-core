@@ -202,6 +202,8 @@ const pushIdent = (type, value) => {
     return `PUSHI ${value}`
   } else if (type === 'string') {
     return `PUSHS ${value}`
+  } else if (type === 'object') {
+    throw new Error('Bad identifier generation path (this is a tilc library error, not your fault)')
   } else if (value in reservedIdentifiers) {
     return `PUSHV ${value}`
   } else if (value in currentFuncContext.regs) {
@@ -225,6 +227,8 @@ const funcCall = (gen, callMember) => {
         item = item.children[0]
         if (item.type === 'call_member') {
           funcCall(gen, item)
+        } else if (item.type === 'object') {
+          genObject(item, gen)
         } else {
           gen(pushIdent(item.type, item.text))
         }
@@ -275,6 +279,31 @@ const genOps = (ops, gen) => {
     } else {
       throw Error(`Unknown item type in operation "${item.type}"`)
     }
+  }
+}
+
+const genObject = (evalNode, gen) => {
+  if (evalNode.children.filter(x => x.children[0].type !== 'value_member').length === 0) {
+    // It's a pure object
+    gen(`NEW`)
+    let props = evalNode.children.map(x => x.children[0])
+    for (let i=0; i < props.length; i++) {
+      const item = props[i]
+      const itemIdent = $(item, 'identifier')
+      const itemValueValue = $(item, 'value', true)
+      const itemValueIdentifier = $(item, 'identifier', false, 1)
+
+      gen(`PUSHS "${itemIdent}"`)
+      if (itemValueValue) {
+        const valType = itemValueValue.children[0].type
+        gen(pushIdent(valType, itemValueValue.text))
+      } else if (itemValueIdentifier) {
+        gen(pushIdent('identifier', itemValueIdentifier))
+      }
+      gen(`SETO`)
+    }
+  } else {
+    return decoders.object(evalNode)
   }
 }
 
@@ -391,9 +420,13 @@ const decoders = {
     if (!qual) {
       if (declValue.children[0].type === 'basevalue') {
         // it's a basic value
-        const { type, text } = declValue.children[0].children[0]
+        const evalNode = declValue.children[0].children[0]
+        const { type, text } = evalNode
+
         if (type === 'number' || type === 'string') {
           gen(pushIdent(type, text))
+        } else if (type === 'object') {
+          genObject(evalNode, gen)
         } else if (type === 'op') {
           genOps(declValue.children[0].children[0].children.map(x => ({type: x.type, value: x.text})), gen)
         } else if (type === 'object_ref') {
@@ -544,13 +577,16 @@ const decoders = {
   }
 }
 
-function decodeAst(node) {
+function decodeAst(node, gen) {
   let tail = [node]
-  const gen = (line, noIndent) => {
-    if (!noIndent && currentFuncContext !== null) {
-      line = '  ' + line
+
+  if (typeof(gen) === "undefined") {
+    gen = (line, noIndent) => {
+      if (!noIndent && currentFuncContext !== null) {
+        line = '  ' + line
+      }
+      console.log(line)
     }
-    console.log(line)
   }
 
   let l = 1
@@ -582,9 +618,18 @@ function decodeAst(node) {
 }
 
 function test() {
+  const fname = './test/data/dex.til'
   const fs = require('fs')
-  const code = fs.readFileSync('./test/data/test.til', 'utf8')
-  const ast = parse(code)
+  const code = fs.readFileSync(fname, 'utf8')
+  const mustache = require('mustache')
+  const testDefines = {
+    rate_precision: 1000000,
+    bottom: '/usd',
+    top: '/btc'
+  }
+  const replacedCode = mustache.render(code, testDefines)
+  console.log(replacedCode)
+  const ast = parse(replacedCode)
   if (ast) {
     //printAst(ast, 0, 0)
     decodeAst(ast)
@@ -596,4 +641,14 @@ function test() {
 
 if (require.main === module) {
   test()
+} else {
+  module.exports = (code) => {
+    let asm = ''
+    const gen = (line) => {
+      asm += line + '\n'
+    }
+    const ast = parse(code)
+    decodeAst(ast, gen)
+    return asm
+  }
 }
