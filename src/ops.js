@@ -615,7 +615,7 @@ const ops = {
         let re = new RegExp(keyRoot + context.stackPop())
         let gen = context.store.iterator({ gt: keyRoot })
 
-        let result = gen.next()
+        let result = await gen.next()
         let results = []
         while (!result.done) {
           const {key, value} = result.value
@@ -670,7 +670,7 @@ const ops = {
         let re = new RegExp(redef)
         let gen = context.store.iterator({ gt: keyRoot })
 
-        let result = gen.next()
+        let result = await gen.next()
         let results = []
         while (!result.done) {
           const {key, value} = result.value
