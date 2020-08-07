@@ -65,7 +65,7 @@ function buildEnvelope(fromKp, data, network, compress) {
     throw new Error('Compression not yet supported')
   }
 
-  const msg = signatureBuf.toString('hex')
+  const msg = bitcoin.crypto.sha256(signatureBuf).toString('hex')
   const sig = bitcoinMessage.sign(msg, fromKp.privateKey, fromKp.compressed)
 
   let envelope = Buffer.concat([
@@ -123,9 +123,10 @@ function openEnvelope(vn) {
     const address = bs58check.encode(reader.readVarlenBuf())
     const nonce = reader.readUInt32LE()
     const data = reader.readVarlenBuf()
+    const txid = bitcoin.crypto.sha256(sigBuf).toString('hex')
 
-    if (bitcoinMessage.verify(sigBuf.toString('hex'), address, sig)) {
-      return {from: address, data, nonce}
+    if (bitcoinMessage.verify(txid, address, sig)) {
+      return {from: address, data, nonce, txid: txid}
     } else {
       throw new Error('invalid signature')
     }
