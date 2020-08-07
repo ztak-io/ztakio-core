@@ -513,16 +513,27 @@ const ops = {
   },
 
   VERIFY: {
-    comment: 'Pops stack, if different than 1 or empty, throws an error.',
+    comment: 'Pops stack, if different than 1 or empty, throws an error (given as parameter). If top element is an array, verifies that at least one of the elements is equal to 1.',
     code: 0x19,
-    validate: (elems) => [],
-    build: (context) => UInt8Buf(ops.VERIFY.code),
-    unpackParams: [],
-    run: (context) => {
+    validate: (elems) => forceArgs(elems, ['string']),
+    build: (message, context) => Buffer.concat([
+      UInt8Buf(ops.VERIFY.code),
+      StringBuf(message)
+    ]),
+    unpackParams: ['string'],
+    run: (message, context) => {
       if (context.stack.length > 0) {
         const top = context.stackPop()
-        if (!(top === 1 || top === 1n)) {
-          throw new Error(`invalid stack on VERIFY op (top != 1)`)
+        if (Array.isArray(top)) {
+          if (top.filter(x => x === 1 || x === 1n).length === 0) {
+            throw new Error(`VERIFY error: ${message}`) //`invalid stack on VERIFY op (top array doesnt contains a 1)`)
+          } else {
+            context.executionContexts[context.currentLineContext] = true
+          }
+        } else if (!(top === 1 || top === 1n)) {
+          throw new Error(`VERIFY error: ${message}`)
+        } else {
+          context.executionContexts[context.currentLineContext] = true
         }
       } else {
         throw new Error(`empty stack on VERIFY op`)
@@ -1111,7 +1122,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(b - a)
+        context.stackPush(a - b)
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MINUS operator`)
       }
@@ -1509,7 +1520,7 @@ const ops = {
           let namespace = currentNamespace + '/'
           let val = await context.store.get(namespace + context.stack[context.stack.length - 1])
 
-          if (typeof(val) === 'undefined') {
+          if (typeof(val) === 'undefined' || val === null) {
             val = def
           }
 

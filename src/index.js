@@ -48,7 +48,7 @@ function varlenBuf(b) {
   return Buffer.concat([l, b])
 }
 
-function buildEnvelope(fromKp, data, network) {
+function buildEnvelope(fromKp, data, network, compress) {
   if (!network) network = networks.mainnet
 
   const { address } = bitcoin.payments.p2pkh({ pubkey: fromKp.publicKey, network })
@@ -58,11 +58,18 @@ function buildEnvelope(fromKp, data, network) {
     uint32lebuf(nonce),
     varlenBuf(data)
   ])
+
+  let cmpFlag = 0
+  if (compress) {
+    cmpFlag = 64
+    throw new Error('Compression not yet supported')
+  }
+
   const msg = signatureBuf.toString('hex')
   const sig = bitcoinMessage.sign(msg, fromKp.privateKey, fromKp.compressed)
 
   let envelope = Buffer.concat([
-    uint8buf((fromKp.compressed?128:0) | 1),
+    uint8buf((fromKp.compressed?128:0) | 1 | cmpFlag),
     varlenBuf(sig),
     signatureBuf,
   ])

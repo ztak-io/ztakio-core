@@ -163,6 +163,7 @@ function createContext(utils, store, callerAddress, currentTxid) {
     callingNamespace: '',
     pendingBranchEnum: null,
     debug: false,
+    executionContexts: {},
     assertExists: {},
     constants: {},
     callerAddress, store, utils, currentTxid,
@@ -212,6 +213,8 @@ function createContext(utils, store, callerAddress, currentTxid) {
     },
 
     appendProgram: (namespace, buf, entrypoints, meta) => {
+      ob.executionContexts[namespace] = false
+
       let unpacked = unpack(buf).map(x => {
         x.overrideNamespace = namespace
         return x
@@ -281,7 +284,18 @@ async function execute(context, entrypoint) {
       context.line++
     }
 
-    await context.store.commit()
+    let canCommit = true
+    for (let x in context.executionContexts) {
+      canCommit &= context.executionContexts[x]
+    }
+
+    if (canCommit) {
+      await context.store.commit()
+    } else {
+      await context.store.rollback()
+      console.log(context.executionContexts)
+      throw new Error(`Couldn't VERIFY transaction`)
+    }
   } catch (e) {
     console.log(e)
     await context.store.rollback()
