@@ -173,5 +173,5 @@ if ((typeof(process) !== 'undefined') && process.mainModule.path) {
 
 module.exports = {
   utils, networks, buildEnvelope, openEnvelope,
-  asm: require('./asm')
+  asm: require('./asm'), tilc: require('./tilc')
 }

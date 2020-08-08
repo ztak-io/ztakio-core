@@ -1,11 +1,7 @@
 const fs = require('fs')
 const Grammars = require('ebnf').Grammars
-const grammar = fs.readFileSync('./src/til_lang_spec.ebnf', 'utf8')
+const grammar = fs.readFileSync(require.resolve('./til_lang_spec.ebnf'), 'utf8')
 const util = require('util')
-
-function collect(ast) {
-
-}
 
 function parse(code) {
   const parser = new Grammars.W3C.Parser(grammar)
@@ -14,7 +10,7 @@ function parse(code) {
   if (compiled) {
     return compiled
   } else {
-    console.log(parser)
+    console.log('Couldnt compile')
   }
 }
 
@@ -220,6 +216,12 @@ const funcCall = (gen, callMember) => {
   const identifier = $(callMember, 'identifier')
   const params = $(callMember, 'params', true)
 
+  let specialVal
+  if (identifier === 'geti' || identifier === 'verify') {
+    // These two functions pass the last parameter as a special value
+    specialVal = params.children.pop().text
+  }
+
   if (params) {
     for (let i=0; i < params.children.length; i++) {
       let item = params.children[i]
@@ -241,7 +243,23 @@ const funcCall = (gen, callMember) => {
   if (path) {
     gen(`ECALL ${path}.${identifier}`)
   } else {
-    gen(`CALL ${identifier}`)
+    if (identifier === 'del') {
+      gen(`DEL`)
+    } else if (identifier === 'put') {
+      gen(`PUT`)
+    } else if (identifier === 'geti') {
+      gen(`GETI ${specialVal}`)
+    } else if (identifier === 'verify') {
+      gen(`VERIFY ${specialVal}`)
+    } else if (identifier === 'sha256') {
+      gen(`SHA256`)
+    } else if (identifier === 'ripemd160') {
+      gen(`RIPEMD160`)
+    } else if (identifier === 'base58') {
+      gen(`BASE58`)
+    } else {
+      gen(`CALL ${identifier}`)
+    }
   }
 }
 
@@ -282,9 +300,26 @@ const genOps = (ops, gen) => {
   }
 }
 
+const genPureObject = (evalNode) => {
+  let ob = {}
+  let props = evalNode.children.map(x => x.children[0])
+  for (let i=0; i < props.length; i++) {
+    const item = props[i]
+    const itemIdent = $(item, 'identifier')
+    const itemValueValue = $(item, 'value', true)
+    const itemValueIdentifier = $(item, 'identifier', false, 1)
+
+    if (itemValueValue) {
+      ob[itemIdent] = itemValueValue.text
+    }
+  }
+  return ob
+}
+
 const genObject = (evalNode, gen) => {
   if (evalNode.children.filter(x => x.children[0].type !== 'value_member').length === 0) {
     // It's a pure object
+    // TODO change this to use the above genPureObject call
     gen(`NEW`)
     let props = evalNode.children.map(x => x.children[0])
     for (let i=0; i < props.length; i++) {
@@ -331,10 +366,22 @@ const decoders = {
     if (identifier) {
       if (identifier === 'meta') {
         let value = $(node, 'value/object', true)
+        let stringified
 
         for (let i=0; i < value.children.length; i++) {
           let child = value.children[i]
-          gen(`META ${$(child, 'value_member/identifier')} ${$(child, 'value_member/value').trim()}`)
+          let raw = $(child, 'value_member/value', true).children[0]
+
+          if (raw.type === 'object') {
+            raw = genPureObject(raw)
+            stringified = JSON.stringify(JSON.stringify(raw))
+          } else {
+            raw = raw.text
+            let parsed = JSON.parse(raw)
+            stringified = JSON.stringify(parsed)
+          }
+
+          gen(`META ${$(child, 'value_member/identifier')} ${stringified}`)
         }
       }
     } else if (path) {
@@ -345,7 +392,7 @@ const decoders = {
   funcdef: (node, gen) => {
     const qual = $(node, 'func_qualification')
 
-    if (qual === 'entry') {
+    if (qual === 'entry' || qual === 'owner') {
       const name = $(node, 'identifier')
       gen(`ENTRY "${name}" ${name}_label`)
     }
@@ -618,7 +665,7 @@ function decodeAst(node, gen) {
 }
 
 function test() {
-  const fname = './test/data/dex.til'
+  const fname = './test/data/fungible_token.til'
   const fs = require('fs')
   const code = fs.readFileSync(fname, 'utf8')
   const mustache = require('mustache')
