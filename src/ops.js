@@ -110,6 +110,8 @@ const ops = {
         if (!existingMeta.Address === context.callerAddress) {
           throw new Error('contract namespace owned by a different address, not executing')
         }
+      } else if (namespace.startsWith('/_')) {
+        throw new Error('cannot deploy under the reserved namespace')
       } else {
         let spls = namespace.split('/')
 
