@@ -261,7 +261,7 @@ function createContext(utils, store, callerAddress, currentTxid) {
 }
 
 
-async function execute(context, entrypoint) {
+async function execute(context, entrypoint, dontCommitReturnState) {
   await context.store.start()
   try {
     while (context.executing) {
@@ -288,18 +288,27 @@ async function execute(context, entrypoint) {
     for (let x in context.executionContexts) {
       canCommit &= context.executionContexts[x]
     }
+    console.log('executionContexts:', context.executionContexts)
 
     if (canCommit) {
-      await context.store.commit()
+      if (dontCommitReturnState) {
+        await context.store.rollback()
+        return {
+          ...context.executionContexts,
+          [context.namespace]: true
+        }
+      } else {
+        await context.store.commit()
+        return true
+      }
     } else {
       await context.store.rollback()
-      console.log(context.executionContexts)
       throw new Error(`Couldn't VERIFY transaction`)
     }
   } catch (e) {
     console.log(e)
     await context.store.rollback()
-    throw new Error(`Line ${context.line} ` + e.message)
+    throw new Error(`Line ${context.line + 1} ` + e.message)
   }
 }
 

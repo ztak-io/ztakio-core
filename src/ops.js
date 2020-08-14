@@ -476,6 +476,7 @@ const ops = {
           context.stack = previousContext.stack.concat(context.stackSlice(-num))
           context.callingNamespace = previousContext.callingNamespace
           context.pendingBranchEnum = previousContext.pendingBranchEnum
+          context.isFederationCall = false
         }
       } else {
         throw new Error(`invalid empty or less than ${num} stack on RET operator`)
@@ -506,6 +507,10 @@ const ops = {
         callingNamespace: context.callingNamespace,
         pendingBranchEnum: context.pendingBranchEnum
       }
+      //isFederationCall
+      if (!context.currentLineContext && /\:federation$/.test(label)) {
+        context.isFederationCall = true
+      }
       context.pendingBranchEnum = null
       context.callingNamespace = context.currentLineContext //context.namespace
       context.stack = [savedContext].concat(context.stack)
@@ -534,7 +539,7 @@ const ops = {
           }
         } else if (!(top === 1 || top === 1n)) {
           throw new Error(`VERIFY error: ${message}`)
-        } else {
+        } else if (context.currentLineContext) {
           context.executionContexts[context.currentLineContext] = true
         }
       } else {
@@ -1420,8 +1425,18 @@ const ops = {
         const signature = context.stackPop()
         const message = context.stackPop()
         const address = context.stackPop()
-        const sigResult = bitcoinMessage.verify(message, address, signature)?1n:0n
-        context.stackPush(sigResult)
+
+        //try {
+          const sigResult = bitcoinMessage.verify(message, address, signature)?1n:0n
+          context.stackPush(sigResult)
+        // The commented code below is a work in progress to support standard ecpair sigs
+        /*} catch (e) {
+          if (e.message === 'Invalid signature length') {
+            // Might be a standard ecpair sig
+          } else {
+            context.stackPush(0n)
+          }
+        }*/
       } else {
         throw new Error(`invalid stack size (${context.stack.length}) on CHECKSIG op (must be 3)`)
       }
@@ -1443,8 +1458,14 @@ const ops = {
       if (currentNamespace) {
         if (context.stack.length > 0) {
           let namespace = currentNamespace + '/'
+          let realGetId = context.stack[context.stack.length - 1]
 
-          await context.stackPush(context.store.get(namespace + context.stack[context.stack.length - 1]))
+          if (context.isFederationCall && realGetId.startsWith('/_/')) {
+            // Do nothing, we're cool
+          } else {
+            realGetId = namespace + realGetId
+          }
+          await context.stackPush(await context.store.get(realGetId))
         } else {
           throw new Error(`invalid stack (size ${context.stack.length}) on GET operator`)
         }
@@ -1472,7 +1493,10 @@ const ops = {
       if (currentNamespace) {
         if (context.stack.length > 1) {
           let namespace = currentNamespace + '/'
-          let key = namespace + context.stack[context.stack.length - 2]
+          let key = context.stack[context.stack.length - 2]
+          if (!context.isFederationCall) {
+            key = namespace + key
+          }
           let value = context.stack[context.stack.length - 1]
 
           if (context.callingNamespace && !currentNamespace.startsWith(context.callingNamespace)) {
@@ -1480,6 +1504,11 @@ const ops = {
 
             if (owner && owner !== context.callingNamespace) {
               throw new Error(`key owned by ${owner}, cannot PUT`)
+            }
+          } else if (context.isFederationCall) {
+            let prevValue = await context.store.get(key)
+            if (prevValue && !(currentNamespace in prevValue)) {
+              throw new Error('cannot alter a tx state from an invalid federation')
             }
           }
 
