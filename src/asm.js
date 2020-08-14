@@ -288,14 +288,14 @@ async function execute(context, entrypoint, dontCommitReturnState) {
     for (let x in context.executionContexts) {
       canCommit &= context.executionContexts[x]
     }
-    console.log('executionContexts:', context.executionContexts)
 
     if (canCommit) {
       if (dontCommitReturnState) {
-        await context.store.rollback()
+        let commitState = await context.store.rollback(true)
         return {
           ...context.executionContexts,
-          [context.namespace]: true
+          [context.namespace]: true,
+          commitState
         }
       } else {
         await context.store.commit()
