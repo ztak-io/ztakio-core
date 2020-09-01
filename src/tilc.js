@@ -10,7 +10,7 @@ function parse(code) {
   if (compiled) {
     return compiled
   } else {
-    console.log('Couldnt compile')
+    console.log('Couldn\'t compile')
   }
 }
 

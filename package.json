@@ -1,6 +1,6 @@
 {
   "name": "ztakio-core",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "A smart contract crypto token library",
   "main": "src/index.js",
   "directories": {
@@ -12,10 +12,10 @@
     "bitcoinjs-message": "^2.1.0",
     "ebnf": "^1.7.4",
     "fengari": "^0.1.4",
-    "json-bigint": "^0.3.0"
+    "json-bigint": "^0.3.0",
+    "mustache": "^4.0.1"
   },
   "devDependencies": {
-    "mustache": "^4.0.1",
     "nodemon": "^2.0.4"
   },
   "scripts": {
