@@ -153,7 +153,7 @@ function utils(network) {
   }
 }
 
-if ((typeof(process) !== 'undefined') && process.mainModule.path) {
+if ((typeof(process) !== 'undefined') && process.mainModule && process.mainModule.path) {
   let fs = require('fs')
   try {
     let path = require('path')

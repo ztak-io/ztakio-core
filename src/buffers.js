@@ -73,15 +73,27 @@ function UInt16Buf(v) {
 }
 
 function Int64Buf(v) {
-  const b = Buffer.alloc(8)
+  const data = BigInt2Buf(v)
+  const pre = Buffer.alloc(2)
+  pre.writeUInt8(0x51, 0)
+  pre.writeUInt8(data.length, 1)
+  return Buffer.concat([pre, data])
+
+  /*const b = Buffer.alloc(8) // Old, incompatible with react
   b.writeBigInt64LE(v)
-  return b
+  return b*/
 }
 
 function UInt64Buf(v) {
-  const b = Buffer.alloc(8)
+  const data = BigInt2Buf(v)
+  const pre = Buffer.alloc(2)
+  pre.writeUInt8(0x52, 0)
+  pre.writeUInt8(data.length, 1)
+  return Buffer.concat([pre, data])
+
+  /*const b = Buffer.alloc(8)
   b.writeBigUInt64LE(v)
-  return b
+  return b*/
 }
 
 function BigInt2Buf(v) {

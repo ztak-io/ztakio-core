@@ -1,6 +1,7 @@
 const fs = require('fs')
 const Grammars = require('ebnf').Grammars
-const grammar = fs.readFileSync(require.resolve('./til_lang_spec.ebnf'), 'utf8')
+//const grammar = fs.readFileSync(require.resolve('./til_lang_spec.ebnf'), 'utf8')
+const grammar = require('./til_lang_spec.ebnf')
 const util = require('util')
 
 function parse(code) {

@@ -1,5 +1,6 @@
 const Grammars = require('ebnf').Grammars
 const grammar = require('./lang_spec.js')
+const buffers = require('./buffers')
 
 const { ops, codeToOp } = require('./ops')
 
@@ -76,7 +77,8 @@ function compile(code, debug) {
         builds.push(elem)
       }
     } catch (e) {
-      console.log(ast.children[i])
+      //console.log(ast.children[i])
+      console.log(e)
       throw new Error(`Line ${i + 1}: ${e.message}`)
     }
   }
@@ -87,6 +89,18 @@ function compile(code, debug) {
     }
   })
 
+  /*builds = builds.map(x => {
+    let p = 0
+    while (p < x.length) {
+      let v = x.readUInt8(p)
+      if (v === 0) {
+        p++
+      } else {
+        break
+      }
+    }
+    return x.slice(p)
+  })*/
   return Buffer.concat(builds)
 }
 
@@ -136,8 +150,13 @@ function unpack(buf) {
           params.push(buf.readUInt16LE(cursor))
           cursor += 2
         } else if (paramType === 'integer') {
-          params.push(buf.readBigInt64LE(cursor))
-          cursor += 8
+          let type = buf.readUInt8(cursor++)
+          let len = buf.readUInt8(cursor++)
+          let data = buf.slice(cursor, cursor + len)
+          params.push(buffers.Buf2BigInt(data))
+          cursor += len
+          /*params.push(buf.readBigInt64LE(cursor))
+          cursor += 8*/
         }
       }
 
