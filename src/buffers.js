@@ -1,8 +1,9 @@
+const JSBI = require('jsbi')
 
 // From https://coolaj86.com/articles/convert-decimal-to-hex-with-js-bigints/ //
 function bnToHex(bn) {
   var pos = true;
-  bn = BigInt(bn);
+  bn = JSBI.BigInt(bn);
 
   if (bn < 0) {
     pos = false;
@@ -38,7 +39,7 @@ function bitnot(bn) {
   bin = bin.split('').map(function (i) {
     return '0' === i ? '1' : '0';
   }).join('');
-  return BigInt('0b' + prefix + bin) + BigInt(1);
+  return JSBI.BigInt('0b' + prefix + bin) + JSBI.BigInt(1);
 }
 
 function hexToBn(hex) {
@@ -47,12 +48,12 @@ function hexToBn(hex) {
   }
 
   var highbyte = parseInt(hex.slice(0, 2), 16)
-  var bn = BigInt('0x' + hex);
+  var bn = JSBI.BigInt('0x' + hex);
 
   if (0x80 & highbyte) {
-    bn = BigInt('0b' + bn.toString(2).split('').map(function (i) {
+    bn = JSBI.BigInt('0b' + bn.toString(2).split('').map(function (i) {
       return '0' === i ? 1 : 0
-    }).join('')) + BigInt(1);
+    }).join('')) + JSBI.BigInt(1);
     bn = -bn;
   }
 

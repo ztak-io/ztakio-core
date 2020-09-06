@@ -2,6 +2,7 @@ const { crypto } = require('bitcoinjs-lib')
 const bitcoinMessage = require('bitcoinjs-message')
 const bs58 = require('bs58')
 const {UInt8Buf, StringBuf, LineOfCodeBuf, Int64Buf, UInt64Buf, UInt16Buf, BigInt2Buf} = require('./buffers')
+const JSBI = require('jsbi')
 
 function forceArgs(list, types) {
   let results = []
@@ -14,7 +15,7 @@ function forceArgs(list, types) {
       if (type === 'string') {
         val = val.slice(1, -1)
       } else if (type === 'number') {
-        val = BigInt(val)
+        val = JSBI.BigInt(val)
       }
       results.push(val)
     } else {
@@ -23,6 +24,54 @@ function forceArgs(list, types) {
   }
 
   return results
+}
+
+function safeEqual(a, b) {
+  if (a instanceof JSBI && b instanceof JSBI) {
+    return JSBI.equal(a, b)
+  } else {
+    return a === b
+  }
+}
+
+function safeLessThan(a, b) {
+  if (a instanceof JSBI && b instanceof JSBI) {
+    return JSBI.lessThan(a, b)
+  } else {
+    return a === b
+  }
+}
+
+function safeLessThanOrEqual(a, b) {
+  if (a instanceof JSBI && b instanceof JSBI) {
+    return JSBI.lessThanOrEqual(a, b)
+  } else {
+    return a === b
+  }
+}
+
+function safeGreaterThan(a, b) {
+  if (a instanceof JSBI && b instanceof JSBI) {
+    return JSBI.greaterThan(a, b)
+  } else {
+    return a === b
+  }
+}
+
+function safeGreaterThanOrEqual(a, b) {
+  if (a instanceof JSBI && b instanceof JSBI) {
+    return JSBI.greaterThanOrEqual(a, b)
+  } else {
+    return a >= b
+  }
+}
+
+function safeToString(a) {
+  if (a instanceof JSBI) {
+    return a.toString()
+  } else {
+    return a + ''
+  }
 }
 
 const ops = {
@@ -296,7 +345,7 @@ const ops = {
       }
 
       if (context.stack.length > 0) {
-        if (context.stack[context.stack.length - 1] !== 0n) {
+        if (JSBI.notEqual(context.stack[context.stack.length - 1], JSBI.BigInt(0))) {
           context.line = line - 1
         }
       } else {
@@ -325,7 +374,7 @@ const ops = {
           console.log('JZ comp', context.stack[context.stack.length - 1])
         }
 
-        if (context.stack[context.stack.length - 1] === 0n) {
+        if (JSBI.equal(context.stack[context.stack.length - 1], JSBI.BigInt(0))) {
           context.line = line - 1
         }
       } else {
@@ -350,7 +399,7 @@ const ops = {
       }
 
       if (context.stack.length > 1) {
-        if (context.stack[context.stack.length - 1] === context.stack[context.stack.length - 2]) {
+        if (safeEqual(context.stack[context.stack.length - 1], context.stack[context.stack.length - 2])) {
           context.line = line - 1
         }
       } else {
@@ -375,7 +424,7 @@ const ops = {
       }
 
       if (context.stack.length > 1) {
-        if (context.stack[context.stack.length - 1] !== context.stack[context.stack.length - 2]) {
+        if (!safeEqual(context.stack[context.stack.length - 1], context.stack[context.stack.length - 2])) {
           context.line = line - 1
         }
       } else {
@@ -400,7 +449,7 @@ const ops = {
       }
 
       if (context.stack.length > 0) {
-        if (context.stack[context.stack.length - 1] < 0n) {
+        if (JSBI.lessThan(context.stack[context.stack.length - 1], JSBI.BigInt(0))) {
           context.line = line - 1
         }
       } else {
@@ -425,7 +474,7 @@ const ops = {
       }
 
       if (context.stack.length > 0) {
-        if (context.stack[context.stack.length - 1] > 0n) {
+        if (JSBI.greaterThan(context.stack[context.stack.length - 1], JSBI.BigInt(0))) {
           context.line = line - 1
         }
       } else {
@@ -532,12 +581,12 @@ const ops = {
       if (context.stack.length > 0) {
         const top = context.stackPop()
         if (Array.isArray(top)) {
-          if (top.filter(x => x === 1 || x === 1n).length === 0) {
+          if (top.filter(x => x === 1 || x === JSBI.BigInt(1)).length === 0) {
             throw new Error(`VERIFY error: ${message}`) //`invalid stack on VERIFY op (top array doesnt contains a 1)`)
           } else {
             context.executionContexts[context.currentLineContext] = true
           }
-        } else if (!(top === 1 || top === 1n)) {
+        } else if (!(top === 1 || JSBI.equals(top, JSBI.BigInt(1)))) {
           throw new Error(`VERIFY error: ${message}`)
         } else if (context.currentLineContext) {
           context.executionContexts[context.currentLineContext] = true
@@ -573,45 +622,6 @@ const ops = {
       }
     }
   },
-
-  // This opcode is rubbish, it's very complicated to use and it's a disguised for-loop
-  /*ITER: {
-    comment: 'Iterates calls to the given label pushing the index into the stack. Stack top must be [..., start, end, step, 0]. Step > 0. Called label must return -1 or 1 to break iteration, 0 to continue to the next value.',
-    code: 0x1B,
-    validate: (elems) => forceArgs(elems, ['identifier']),
-    relocateStrategy: 'move',
-    build: (label, context) => Buffer.concat([
-      UInt8Buf(ops.ITER.code),
-      LineOfCodeBuf(context.findLabel(label))
-    ]),
-    unpackParams: ['uint16'],
-    run: async (line, context) => {
-      if (line <= context.line) {
-        throw new Error(`cannot iterate line ${line} from line ${context.line}`)
-      }
-
-      if (context.stack.length > 3) {
-        if (context.stack[context.stack.length - 2] > 0) {
-          let r = context.stackPop()
-          let v = context.stack[context.stack.length - 3]
-
-          context.stack[context.stack.length - 3] += context.stack[context.stack.length - 1] // Mutate stack for next iteration
-
-          if (r === 0n && v <= context.stack[context.stack.length - 2]) {
-            context.line = context.line - 1 // On return, repeat iteration with changed stack
-            await ops.CALL.run(line, context)
-            context.stackPush(v)
-          } else {
-            context.stackPush(r)
-          }
-        } else {
-          throw new Error(`ITER step must be positive non-zero integer`)
-        }
-      } else {
-        throw new Error(`invalid stack size (${context.stack.length}) on ITER operator (must be at least 4)`)
-      }
-    }
-  },*/
 
   ENUM: {
     comment: 'Enumerates values in a namespace. Regular expression is popped from the stack. Matching groups are pushed into each call to the label passed as parameter.',
@@ -657,7 +667,7 @@ const ops = {
           context.registers = {}
           context.line = line
         } else {
-          context.stackPush(1n)
+          context.stackPush(JSBI.BigInt(1))
         }
       } else {
         throw new Error(`invalid stack size (${context.stack.length}) on ENUM operator (must be at least 1)`)
@@ -724,7 +734,7 @@ const ops = {
             console.log('enumord stack', context.stack[0].registers)
           }
         } else {
-          context.stackPush(1n)
+          context.stackPush(JSBI.BigInt(1))
         }
       } else {
         throw new Error(`invalid stack size (${context.stack.length}) on ENUM operator (must be at least 1)`)
@@ -981,8 +991,8 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let second = context.stackPop() + ''
-        let first = context.stackPop() + ''
+        let second = safeToString(context.stackPop())
+        let first = safeToString(context.stackPop())
 
         context.stackPush(first + second)
       } else {
@@ -1112,7 +1122,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(a + b)
+        context.stackPush(JSBI.add(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on PLUS operator`)
       }
@@ -1129,7 +1139,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(a - b)
+        context.stackPush(JSBI.subtract(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MINUS operator`)
       }
@@ -1146,7 +1156,7 @@ const ops = {
       if (context.stack.length > 1) {
         let v1 = context.stackPop()
         let v2 = context.stackPop()
-        context.stackPush(v1 * v2)
+        context.stackPush(JSBI.multiply(v1, v2))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MUL operator`)
       }
@@ -1163,7 +1173,7 @@ const ops = {
       if (context.stack.length > 1) {
         let down = context.stackPop()
         let up = context.stackPop()
-        context.stackPush(up / down)
+        context.stackPush(JSBI.divide(up, down))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on DIV operator`)
       }
@@ -1178,7 +1188,7 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 0) {
-        context.stackPush(-context.stackPop())
+        context.stackPush(JSBI.unaryMinus(context.stackPop()))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on NEG operator`)
       }
@@ -1195,7 +1205,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(a & b)
+        context.stackPush(JSBI.bitwiseAnd(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on AND operator`)
       }
@@ -1212,7 +1222,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(a | b)
+        context.stackPush(JSBI.bitwiseOr(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on OR operator`)
       }
@@ -1229,7 +1239,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(a ^ b)
+        context.stackPush(JSBI.bitwiseXor(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on XOR operator`)
       }
@@ -1246,7 +1256,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(a === b)
+        context.stackPush(safeEqual(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on EQ operator`)
       }
@@ -1263,7 +1273,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(a !== b)
+        context.stackPush(!safeEqual(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on NEQ operator`)
       }
@@ -1280,7 +1290,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(b < a)
+        context.stackPush(safeLessThan(b, a))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on LT operator`)
       }
@@ -1297,7 +1307,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(b <= a)
+        context.stackPush(safeLessThanOrEqual(b, a))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on LTE operator`)
       }
@@ -1314,7 +1324,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(b > a)
+        context.stackPush(safeGreaterThan(b, a))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on GT operator`)
       }
@@ -1331,7 +1341,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(b >= a)
+        context.stackPush(safeGreaterThanOrEqual(b, a))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on GTE operator`)
       }
@@ -1427,14 +1437,14 @@ const ops = {
         const address = context.stackPop()
 
         //try {
-          const sigResult = bitcoinMessage.verify(message, address, signature)?1n:0n
+          const sigResult = bitcoinMessage.verify(message, address, signature)?JSBI.BigInt(1):JSBI.BigInt(0)
           context.stackPush(sigResult)
         // The commented code below is a work in progress to support standard ecpair sigs
         /*} catch (e) {
           if (e.message === 'Invalid signature length') {
             // Might be a standard ecpair sig
           } else {
-            context.stackPush(0n)
+            context.stackPush(JSBI.BigInt(0))
           }
         }*/
       } else {
