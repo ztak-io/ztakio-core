@@ -862,7 +862,7 @@ const ops = {
       } else if (ident === 'nil') {
         context.stackPush(null)
       } else if (ident === 'timestamp') {
-        context.stackPush(Date.now())
+        context.stackPush(JSBI.BigInt(Date.now()))
       } else {
         throw new Error(`invalid special value ${ident}`)
       }

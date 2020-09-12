@@ -189,7 +189,7 @@ function bspOps(ops) {
 
 const reservedIdentifiers = {
   caller: true, owner: true, height: true, txid: true, callingnamespace: true,
-  return: true, search: true, require: true, const: true
+  return: true, search: true, require: true, const: true, nil: true, timestamp: true
 }
 let firstFuncdefParsed = false
 let currentFuncContext = null
