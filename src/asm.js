@@ -47,7 +47,6 @@ function compile(code, debug) {
   // Collect all the labels for further reference
   for (let i=0; i < ast.children.length; i++) {
     const elem = ast.children[i]
-
     if (elem.type === 'label') {
       if (elem.children[0].type === 'alphanumeric') {
         labels[elem.children[0].text] = {line: i, referenced: false}

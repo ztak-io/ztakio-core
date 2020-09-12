@@ -22,7 +22,7 @@ member               ::= WS* (return_member | if_member | enum_member | require_
 number                ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? (("e" | "E") ( "-" | "+" )? ("0" | [1-9] [0-9]*))?
 
 op ::= (false | null | true | object | object_ref | number | string | identifier | call_member) (NWS* operator NWS* (false | null | true | object | object_ref | number | string | identifier | call_member))+
-operator ::= (#x2B | #x2D | #x2A | #x2F | #x7C | #x26 | #x5E | #x25 | #x3E #x3E | #x3E | #x3C #x3C | #x3C | #x5E #x5E | #x7C #x7C | #x26 #x26 | #x3D #x3D | #x3C #x3D | #x3E #x3D | #x21 #x3D)
+operator ::= (#x2B | #x2D | #x2A | #x2F | #x7C | #x26 | #x5E | #x5F | #x25 | #x3E #x3E | #x3E | #x3C #x3C | #x3C | #x5E #x5E | #x7C #x7C | #x26 #x26 | #x3D #x3D | #x3C #x3D | #x3E #x3D | #x21 #x3D)
 
 params ::= WS* (basevalue | identifier) WS* ("," WS* (basevalue | identifier) WS*)*
 func_params ::= WS* identifier WS* ("," WS* identifier WS*)*
@@ -49,7 +49,7 @@ return_member ::= "return"  WS* basevalue_list
 call_member ::= (path ".")? identifier BEGIN_CALL params? END_CALL
 
 funcdef ::= (func_qualification WS+)* identifier BEGIN_CALL func_params? END_CALL BEGIN_OBJECT (WS* member WS*)* END_OBJECT
-func_qualification ::= ("entry" | "func" | "enum" | "owner")
+func_qualification ::= ("entry" | "func" | "enum" | "owner" | "deploy")
 
 object_ref ::= identifier ("." identifier)+
 

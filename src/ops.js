@@ -221,7 +221,7 @@ const ops = {
   },
 
   DEPLOY: {
-    comment: 'Deploys the current contract, calls the apporpiate \'deploy\' entrypoint if the contract didn\'t exist',
+    comment: 'Deploys the current contract, calls the appropiate \'deploy\' entrypoint if the contract didn\'t exist',
     code: 0x06,
     validate: (elems) => forceArgs(elems, ['identifier']),
     relocateStrategy: 'noop',

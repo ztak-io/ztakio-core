@@ -89,6 +89,7 @@ function operatorToAsm(op, gen) {
     '/': 'DIV',
     '%': 'MOD',
     '+': 'PLUS',
+    '_': 'CONCAT',
     '-': 'MINUS',
     '<<': 'SHL',
     '>>': 'SHR',
@@ -117,7 +118,7 @@ function operatorToAsm(op, gen) {
 
 const precedence = {
   operator: [
-    ['*', '/', '%'],
+    ['*', '/', '%', '_'],
     ['+', '-'],
     ['<<', '>>'],
     ['<', '<=', '>', '>='],
@@ -251,7 +252,8 @@ const funcCall = (gen, callMember) => {
     } else if (identifier === 'geti') {
       gen(`GETI ${specialVal}`)
     } else if (identifier === 'get') {
-      gen(`GET ${specialVal}`)
+      gen(`PUSHR ${specialVal}`)
+      gen(`GET`)
     } else if (identifier === 'verify') {
       gen(`VERIFY ${specialVal}`)
     } else if (identifier === 'sha256') {
@@ -386,7 +388,7 @@ const decoders = {
             stringified = JSON.stringify(parsed)
           }
 
-          gen(`META ${$(child, 'value_member/identifier')} ${stringified}`)
+          gen(`META "${$(child, 'value_member/identifier')}" ${stringified}`)
         }
       }
     } else if (path) {
@@ -401,6 +403,12 @@ const decoders = {
       const name = $(node, 'identifier')
       gen(`ENTRY "${name}" ${name}_label`)
     }
+
+    if (qual === 'deploy') {
+      const name = $(node, 'identifier')
+      gen(`DEPLOY ${name}_label`)
+    }
+
     node.type = 'funcdef_declared'
     let result = [node]
 
@@ -412,14 +420,14 @@ const decoders = {
   },
 
   end_preamble: (node, gen) => {
-    gen('RET 0 # end_preamble')
+    gen('END # end_preamble')
   },
 
   funcdef_declared: (node, gen) => {
     const name = $(node, 'identifier')
     const params = $(node, 'func_params', true)
     const qualification = $(node, 'func_qualification')
-    gen(`${name}_label:`)
+    gen(`:${name}_label`)
     if (qualification === 'owner') {
       gen(`OWNER`)
     } else if (qualification === 'enum') {
@@ -555,7 +563,8 @@ const decoders = {
     if (elseBlock) {
       head.push({
         type: 'labeled_block',
-        label: genLabel('else'),
+        //label: genLabel('else'),
+        label: null,
         endLabel: endLabel,
         content: $(elseBlock, 'object', true)
       })
@@ -574,11 +583,13 @@ const decoders = {
   },
 
   if_end_block: (node, gen) => {
-    gen(`${node.label}:`, true)
+    gen(`:${node.label}`, true)
   },
 
   labeled_block: (node, gen) => {
-    gen(`${node.label}:`, true)
+    if (node.label) {
+      gen(`:${node.label}`, true)
+    }
     return { head: node.content.children.concat([{ type: 'code', value: `JMP ${node.endLabel}` }]) }
   },
 
@@ -695,6 +706,7 @@ if (require.main === module) {
   test()
 } else {
   module.exports = (code) => {
+    firstFuncdefParsed = false
     let asm = ''
     const gen = (line) => {
       asm += line + '\n'
