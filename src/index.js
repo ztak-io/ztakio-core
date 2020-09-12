@@ -1,6 +1,7 @@
 const bitcoin = require('bitcoinjs-lib')
 const bitcoinMessage = require('bitcoinjs-message')
 const bs58check = require('bs58check')
+const asm = require('./asm')
 
 let networks = {
   mainnet: {
@@ -153,6 +154,25 @@ function utils(network) {
   }
 }
 
+function decode(envelope) {
+  let msg = openEnvelope(Buffer.from(envelope, 'hex'))
+  let lines = asm.unpack(msg.data).filter(x => x.opName !== 'NOOP' && x.opName !== 'END' && x.opName !== 'REQUIRE')
+
+  let calls = []
+  let params = []
+  for (let i=0; i < lines.length; i++) {
+    let item = lines[i]
+    if (item.opName.startsWith('PUSH')) {
+      params.push(item.params[0])
+    } else if (item.opName === 'ECALL') {
+      calls.push({ [item.params[0]]: params })
+      params = []
+    }
+  }
+
+  return {from: msg.from, calls}
+}
+
 if ((typeof(process) !== 'undefined') && process.mainModule && process.mainModule.path) {
   let fs = require('fs')
   try {
@@ -172,6 +192,6 @@ if ((typeof(process) !== 'undefined') && process.mainModule && process.mainModul
 }
 
 module.exports = {
-  utils, networks, buildEnvelope, openEnvelope,
-  asm: require('./asm'), tilc: require('./tilc')
+  utils, networks, buildEnvelope, openEnvelope, decode,
+  asm, tilc: require('./tilc')
 }

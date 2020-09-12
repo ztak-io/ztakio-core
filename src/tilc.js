@@ -218,7 +218,7 @@ const funcCall = (gen, callMember) => {
   const params = $(callMember, 'params', true)
 
   let specialVal
-  if (identifier === 'geti' || identifier === 'verify') {
+  if (identifier === 'geti' || identifier === 'verify' || identifier === 'get') {
     // These two functions pass the last parameter as a special value
     specialVal = params.children.pop().text
   }
@@ -250,6 +250,8 @@ const funcCall = (gen, callMember) => {
       gen(`PUT`)
     } else if (identifier === 'geti') {
       gen(`GETI ${specialVal}`)
+    } else if (identifier === 'get') {
+      gen(`GET ${specialVal}`)
     } else if (identifier === 'verify') {
       gen(`VERIFY ${specialVal}`)
     } else if (identifier === 'sha256') {
@@ -295,6 +297,8 @@ const genOps = (ops, gen) => {
       gen(pushIdent(item.type, item.value))
     } else if (item.type === 'object_ref') {
       getSetObj(item.value, gen, false)
+    } else if (item.type === 'null') {
+      gen('PUSHV nil')
     } else {
       throw Error(`Unknown item type in operation "${item.type}"`)
     }
@@ -541,8 +545,8 @@ const decoders = {
     for (let i=0; i < conditions.length; i++) {
       const jmpLabel = genLabel(i)
       const op = $(conditions[i], 'op', true)
-      //console.log('---->', op)
-      genOps(op.children.map(x => ({type: x.type, value: x.text})), gen)
+      const opMap = op.children.map(x => ({type: x.type, value: x.text}))
+      genOps(opMap, gen)
       gen(`JCND ${genLabel(i)}`)
     }
 
