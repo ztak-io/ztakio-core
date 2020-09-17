@@ -1,6 +1,6 @@
 {
   "name": "ztakio-core",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "A smart contract crypto token library",
   "main": "src/index.js",
   "directories": {

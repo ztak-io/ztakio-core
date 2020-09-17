@@ -1529,7 +1529,7 @@ const ops = {
           if (context.debug) {
             console.log('PUT!', key, value)
           }
-          await context.store.put(key, value)
+          await context.store.put(key, value, context.callerAddress)
 
           if (context.callingNamespace) {
             await context.store.put(key + '.owner', context.callingNamespace)
