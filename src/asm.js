@@ -195,7 +195,11 @@ function createContext(utils, store, callerAddress, currentTxid) {
     },
 
     stackSlice: (a, b) => {
-      return ob.stack.slice(a, b)
+      if (a === -0) {
+        return []
+      } else {
+        return ob.stack.slice(a, b)
+      }
     },
 
     stackShift: () => {
