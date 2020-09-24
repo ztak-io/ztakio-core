@@ -427,7 +427,12 @@ const decoders = {
     const name = $(node, 'identifier')
     const params = $(node, 'func_params', true)
     const qualification = $(node, 'func_qualification')
-    gen(`:${name}_label`)
+    if (qualification === 'func' || qualification === 'enum') {
+      gen(`:${name}`)
+    } else {
+      gen(`:${name}_label`)
+    }
+
     if (qualification === 'owner') {
       gen(`OWNER`)
     } else if (qualification === 'enum') {
