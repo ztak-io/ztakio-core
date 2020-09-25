@@ -297,7 +297,7 @@ async function execute(context, entrypoint, dontCommitReturnState) {
 
       context.currentLineOwner = currentLine.owner || context.callerAddress
       context.currentLineContext = currentLine.overrideNamespace || context.namespace
-      //console.log('--->',  context.currentLineContext, ' ', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
+      //console.log('--->',  context.currentLineContext, ' ', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params, context.registers)
       //console.log('--->', context.line, '/', context.program.length, context.stack, currentLine.opName, ...currentLine.params)
       //console.log('--->', context.line, '/', context.program.length, currentLine.opName, ...currentLine.params)
       await op.run(...currentLine.params, context)

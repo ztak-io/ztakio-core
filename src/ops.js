@@ -1143,7 +1143,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
-        context.stackPush(JSBI.subtract(a, b))
+        context.stackPush(JSBI.subtract(b, a))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MINUS operator`)
       }
@@ -1650,7 +1650,7 @@ const ops = {
     ]),
     unpackParams: [],
     run: (context) => {
-      console.log('LOG:', context.stackPop())
+      console.log('LOG:', safeToString(context.stackPop()))
     }
   },
   LOG: {

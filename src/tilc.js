@@ -262,6 +262,8 @@ const funcCall = (gen, callMember) => {
       gen(`RIPEMD160`)
     } else if (identifier === 'base58') {
       gen(`BASE58`)
+    } else if (identifier === 'logp') {
+      gen(`LOGP`)
     } else {
       gen(`CALL ${identifier}`)
     }
