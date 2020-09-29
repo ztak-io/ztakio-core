@@ -2,7 +2,7 @@ const Grammars = require('ebnf').Grammars
 const grammar = require('./lang_spec.js')
 const buffers = require('./buffers')
 
-const { ops, codeToOp } = require('./ops')
+const { ops, codeToOp, safeToString } = require('./ops')
 
 function buildOp(elem, context) {
   if (elem.children[0].type === 'identifier') {
@@ -335,5 +335,5 @@ async function execute(context, entrypoint, dontCommitReturnState) {
 }
 
 module.exports = {
-  compile, unpack, createContext, execute
+  compile, unpack, createContext, execute, ops, safeToString
 }

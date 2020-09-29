@@ -85,6 +85,7 @@ function $(node, path, dumpNode, skip) {
 
 function operatorToAsm(op, gen) {
   const simpleOps = {
+    '**': 'POW',
     '*': 'MUL',
     '/': 'DIV',
     '%': 'MOD',
@@ -118,6 +119,7 @@ function operatorToAsm(op, gen) {
 
 const precedence = {
   operator: [
+    ['**'],
     ['*', '/', '%', '_'],
     ['+', '-'],
     ['<<', '>>'],
@@ -188,7 +190,7 @@ function bspOps(ops) {
 }
 
 const reservedIdentifiers = {
-  caller: true, owner: true, height: true, txid: true, callingnamespace: true,
+  caller: true, owner: true, height: true, txid: true, callingnamespace: true, currentnamespace: true,
   return: true, search: true, require: true, const: true, nil: true, timestamp: true
 }
 let firstFuncdefParsed = false
@@ -219,9 +221,16 @@ const funcCall = (gen, callMember) => {
   const params = $(callMember, 'params', true)
 
   let specialVal
+  let specialValType
   if (identifier === 'geti' || identifier === 'verify' || identifier === 'get') {
     // These two functions pass the last parameter as a special value
-    specialVal = params.children.pop().text
+    let sv = params.children.pop()
+    if (sv.type === 'basevalue') {
+      specialValType = sv.children[0].type
+    } else {
+      specialValType = sv.type
+    }
+    specialVal = sv.text
   }
 
   if (params) {
@@ -252,7 +261,13 @@ const funcCall = (gen, callMember) => {
     } else if (identifier === 'geti') {
       gen(`GETI ${specialVal}`)
     } else if (identifier === 'get') {
-      gen(`PUSHR ${specialVal}`)
+      if (specialValType === 'identifier') {
+        gen(`PUSHR ${specialVal}`)
+      } else if (specialValType === 'string') {
+        gen(`PUSHS ${specialVal}`)
+      } else {
+        gen(`PUSHI ${specialVal}`)
+      }
       gen(`GET`)
     } else if (identifier === 'verify') {
       gen(`VERIFY ${specialVal}`)
@@ -606,8 +621,8 @@ const decoders = {
     const order = {"+": "asc", "-": "desc"}[$(node, "enum_order")]
     const field = $(node, "identifier", false, 1)
 
-    gen(`PUSHS "${regex}"`)
-    gen(`ENUMORD ${ident}_label "${field}" "${order}"`)
+    gen(`PUSHS ${regex}`)
+    gen(`ENUMORD ${ident} "${field}" "${order}"`)
   },
 
   return_member: (node, gen) => {

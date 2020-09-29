@@ -651,7 +651,7 @@ const ops = {
           if (matches) {
             results.push(matches.slice(1).concat([value]))
           }
-          result = gen.next()
+          result = await gen.next()
         }
         if (results.length > 0) {
           let firstResult = results.shift()
@@ -706,7 +706,7 @@ const ops = {
           if (matches) {
             results.push(matches.slice(1).concat([value]))
           }
-          result = gen.next()
+          result = await gen.next()
         }
         if (results.length > 0) {
           results = results.sort(([ka, a], [kb, b]) => {
@@ -859,6 +859,8 @@ const ops = {
         context.stackPush(context.currentTxid)
       } else if (ident === 'callingnamespace') {
         context.stackPush(context.callingNamespace)
+      } else if (ident === 'currentnamespace') {
+        context.stackPush(context.currentLineContext)
       } else if (ident === 'nil') {
         context.stackPush(null)
       } else if (ident === 'timestamp') {
@@ -1386,6 +1388,23 @@ const ops = {
     }
   },
 
+  POW: {
+    comment: 'Pops and elevates the first value by the second value on top of the stack as signed integers, pushes the result back into the stack',
+    code: 0x50,
+    validate: (elems) => [],
+    build: (context) => UInt8Buf(ops.POW.code),
+    unpackParams: [],
+    run: (context) => {
+      if (context.stack.length > 1) {
+        let v1 = context.stackPop()
+        let v2 = context.stackPop()
+        context.stackPush(JSBI.exponentiate(v1, v2))
+      } else {
+        throw new Error(`invalid stack (size ${context.stack.length}) on POW operator`)
+      }
+    }
+  },
+
   SHA256: {
     comment: 'Calculates the SHA256 hash of the current top of the stack item',
     code: 0x60,
@@ -1508,7 +1527,7 @@ const ops = {
         if (context.stack.length > 1) {
           let namespace = currentNamespace + '/'
           let key = context.stack[context.stack.length - 2]
-          if (!context.isFederationCall) {
+          if (!context.isFederationCall && !key.startsWith('/_/cron.')) {
             key = namespace + key
           }
           let value = context.stack[context.stack.length - 1]
@@ -1694,5 +1713,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-  ops, codeToOp, help
+  ops, codeToOp, help, safeToString
 }
