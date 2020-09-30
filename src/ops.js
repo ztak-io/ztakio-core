@@ -694,7 +694,7 @@ const ops = {
 
       if (context.stack.length > 0) {
         let keyRoot = context.currentLineContext + '/'
-        let redef = (keyRoot + context.stackPop()).replace(/\//g, '\\/')
+        let redef = (keyRoot + '(' +context.stackPop() + ')').replace(/\//g, '\\/')
         let re = new RegExp(redef)
         let gen = context.store.iterator({ gt: keyRoot })
 
@@ -704,11 +704,13 @@ const ops = {
           const {key, value} = result.value
           let matches = re.exec(key)
           if (matches) {
-            results.push(matches.slice(1).concat([value]))
+            results.push([matches[1], value])
           }
+
           result = await gen.next()
         }
         if (results.length > 0) {
+          results = results.filter(([k, v]) => (typeof(v) === 'object') && sortKey in v)
           results = results.sort(([ka, a], [kb, b]) => {
             if (order === 'desc') {
               return Number(b[sortKey] - a[sortKey])
@@ -977,7 +979,6 @@ const ops = {
           if (ident in callee.registers)  {
             context.stackPush(callee.registers[ident])
           } else {
-            console.log(callee.registers)
             throw new Error(`invalid callee register ${ident} on PUSHPR: Available ${Object.keys(callee.registers)}`)
           }
         } else {

@@ -195,7 +195,7 @@ function createContext(utils, store, callerAddress, currentTxid) {
     },
 
     stackSlice: (a, b) => {
-      if (a === -0) {
+      if (a === -0 && typeof(b) === "undefined") {
         return []
       } else {
         return ob.stack.slice(a, b)
