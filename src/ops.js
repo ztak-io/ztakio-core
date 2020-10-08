@@ -704,6 +704,7 @@ const ops = {
       if (context.stack.length > 0) {
         let keyRoot = context.currentLineContext + '/'
         let redef = (keyRoot + '(' +context.stackPop() + ')').replace(/\//g, '\\/')
+        // TODO indexing can be oportunistic here, as we can assume indexes and regex matches will be repeated in the future
         let re = new RegExp(redef)
         let gen = context.store.iterator({ gt: keyRoot })
 
@@ -1546,6 +1547,9 @@ const ops = {
         if (context.stack.length > 1) {
           let namespace = currentNamespace + '/'
           let key = context.stack[context.stack.length - 2]
+          if (key && typeof(key) !== 'string') {
+            key = safeToString(key)
+          }
           if (!context.isFederationCall && typeof(key) === 'string' && !key.startsWith('/_/cron.')) {
             key = namespace + key
           }
