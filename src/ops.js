@@ -69,6 +69,8 @@ function safeGreaterThanOrEqual(a, b) {
 function safeToString(a) {
   if (a instanceof JSBI) {
     return a.toString()
+  } else if (typeof(a) === 'object') {
+    return JSON.stringify(a)
   } else {
     return a + ''
   }
@@ -122,6 +124,13 @@ const ops = {
         return
       } else if (key === 'Author') {
         verifyAddress(value)
+      } else {
+        try {
+          // This double json parsing is not an error, we use JSON.parse to unescape backlash escaped quotes opportunistically
+          value = JSON.parse(JSON.parse("\"" + value + "\""))
+        } catch (e) {
+          // Do nothing
+        }
       }
 
       context.meta[key] = value
@@ -858,6 +867,9 @@ const ops = {
       } else if (ident === 'height') {
         context.stackPush(context.currentHeight)
       } else if (ident === 'txid') {
+        if (!context.currentTxid) {
+          throw new Error('using txid in an undefined txid context')
+        }
         context.stackPush(context.currentTxid)
       } else if (ident === 'callingnamespace') {
         context.stackPush(context.callingNamespace)
@@ -1397,8 +1409,14 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let v1 = context.stackPop()
         let v2 = context.stackPop()
+        let v1 = context.stackPop()
+        if (!(v1 instanceof JSBI)) {
+          v1 = JSBI.BigInt(v1)
+        }
+        if (!(v2 instanceof JSBI)) {
+          v2 = JSBI.BigInt(v2)
+        }
         context.stackPush(JSBI.exponentiate(v1, v2))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on POW operator`)
@@ -1496,7 +1514,7 @@ const ops = {
 
           if (context.isFederationCall && realGetId.startsWith('/_/')) {
             // Do nothing, we're cool
-          } else {
+          } else if (realGetId[0] !== '/') {
             realGetId = namespace + realGetId
           }
           await context.stackPush(await context.store.get(realGetId))
@@ -1528,7 +1546,7 @@ const ops = {
         if (context.stack.length > 1) {
           let namespace = currentNamespace + '/'
           let key = context.stack[context.stack.length - 2]
-          if (!context.isFederationCall && !key.startsWith('/_/cron.')) {
+          if (!context.isFederationCall && typeof(key) === 'string' && !key.startsWith('/_/cron.')) {
             key = namespace + key
           }
           let value = context.stack[context.stack.length - 1]
