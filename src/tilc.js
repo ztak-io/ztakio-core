@@ -334,7 +334,11 @@ const genPureObject = (evalNode) => {
     const itemValueIdentifier = $(item, 'identifier', false, 1)
 
     if (itemValueValue) {
-      ob[itemIdent] = itemValueValue.text
+      if (/^-?[0-9]+$/.test(itemValueValue.text)) {
+        ob[itemIdent] = parseInt(itemValueValue.text)
+      } else {
+        ob[itemIdent] = itemValueValue.text
+      }
     }
   }
   return ob
@@ -404,7 +408,6 @@ const decoders = {
             let parsed = JSON.parse(raw)
             stringified = JSON.stringify(parsed)
           }
-
           gen(`META "${$(child, 'value_member/identifier')}" ${stringified}`)
         }
       }

@@ -26,7 +26,20 @@ function forceArgs(list, types) {
   return results
 }
 
+function enforceJSBIifPossible(a) {
+  if (!(a instanceof JSBI) && typeof(a) === 'object' && 'sign' in a) {
+    let na = JSBI.from(a)
+    na.sign = a.sign
+    a = na
+  }
+
+  return a
+}
+
 function safeEqual(a, b) {
+  a = enforceJSBIifPossible(a)
+  b = enforceJSBIifPossible(b)
+
   if (a instanceof JSBI && b instanceof JSBI) {
     return JSBI.equal(a, b)
   } else {
@@ -35,30 +48,42 @@ function safeEqual(a, b) {
 }
 
 function safeLessThan(a, b) {
+  a = enforceJSBIifPossible(a)
+  b = enforceJSBIifPossible(b)
+
   if (a instanceof JSBI && b instanceof JSBI) {
     return JSBI.lessThan(a, b)
   } else {
-    return a === b
+    return a < b
   }
 }
 
 function safeLessThanOrEqual(a, b) {
+  a = enforceJSBIifPossible(a)
+  b = enforceJSBIifPossible(b)
+
   if (a instanceof JSBI && b instanceof JSBI) {
     return JSBI.lessThanOrEqual(a, b)
   } else {
-    return a === b
+    return a <= b
   }
 }
 
 function safeGreaterThan(a, b) {
+  a = enforceJSBIifPossible(a)
+  b = enforceJSBIifPossible(b)
+
   if (a instanceof JSBI && b instanceof JSBI) {
     return JSBI.greaterThan(a, b)
   } else {
-    return a === b
+    return a > b
   }
 }
 
 function safeGreaterThanOrEqual(a, b) {
+  a = enforceJSBIifPossible(a)
+  b = enforceJSBIifPossible(b)
+
   if (a instanceof JSBI && b instanceof JSBI) {
     return JSBI.greaterThanOrEqual(a, b)
   } else {
@@ -67,6 +92,8 @@ function safeGreaterThanOrEqual(a, b) {
 }
 
 function safeToString(a) {
+  a = enforceJSBIifPossible(a)
+  
   if (a instanceof JSBI) {
     return a.toString()
   } else if (typeof(a) === 'object') {
