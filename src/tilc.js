@@ -196,6 +196,7 @@ const reservedIdentifiers = {
 let firstFuncdefParsed = false
 let currentFuncContext = null
 let currentLine = 0
+let hasBeenRequired = {}
 
 const pushIdent = (type, value) => {
   if (type === 'number') {
@@ -215,7 +216,7 @@ const pushIdent = (type, value) => {
   }
 }
 
-const funcCall = (gen, callMember) => {
+const funcCall = (gen, callMember, debug) => {
   const path = $(callMember, 'path')
   const identifier = $(callMember, 'identifier')
   const params = $(callMember, 'params', true)
@@ -251,8 +252,16 @@ const funcCall = (gen, callMember) => {
     }
   }
 
+  if (debug) {
+    console.log('---->', path, identifier)
+  }
+
   if (path) {
-    gen(`ECALL ${path}.${identifier}`)
+    if (!hasBeenRequired[path]) {
+      gen(`REQUIRE ${path}`)
+      hasBeenRequired[path] = true
+    }
+    gen(`ECALL ${path}:${identifier}`)
   } else {
     if (identifier === 'del') {
       gen(`DEL`)
@@ -339,7 +348,7 @@ const genPureObject = (evalNode) => {
       } else {
         ob[itemIdent] = itemValueValue.text
       }
-    }
+    } // TODO itemValueIdentifier needs to be covered here
   }
   return ob
 }
@@ -390,6 +399,7 @@ const decoders = {
   value_member: (node, gen) => {
     let identifier = $(node, 'identifier')
     let path = $(node, 'path')
+    let call = $(node, 'value/member/call_member', true)
 
     if (identifier) {
       if (identifier === 'meta') {
@@ -411,8 +421,18 @@ const decoders = {
           gen(`META "${$(child, 'value_member/identifier')}" ${stringified}`)
         }
       }
-    } else if (path) {
-      console.trace('/path = value not implemented!')
+    } else if (path && !identifier && call) {
+      /*let func = $(call, 'identifier')
+      let params = $(call, 'params', true)
+
+      for (let i=0; i < )
+      // push the params
+      console.log(path, func, params)
+
+      gen(`ECALL ${path}:${func}`)*/
+      //funcCall(gen, node, true)
+      //console.log(node.children)
+      console.trace('/path = value not implemented')
     }
   },
 
@@ -732,6 +752,7 @@ if (require.main === module) {
 } else {
   module.exports = (code) => {
     firstFuncdefParsed = false
+    hasBeenRequired = {}
     let asm = ''
     const gen = (line) => {
       asm += line + '\n'

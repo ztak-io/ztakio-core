@@ -27,10 +27,12 @@ function forceArgs(list, types) {
 }
 
 function enforceJSBIifPossible(a) {
-  if (!(a instanceof JSBI) && typeof(a) === 'object' && 'sign' in a) {
+  if (!(a instanceof JSBI) && a !== null && typeof(a) === 'object' && 'sign' in a) {
     let na = JSBI.from(a)
     na.sign = a.sign
     a = na
+  } else if (typeof(a) === 'bigint') {
+    a = JSBI.BigInt(a.toString())
   }
 
   return a
@@ -93,7 +95,7 @@ function safeGreaterThanOrEqual(a, b) {
 
 function safeToString(a) {
   a = enforceJSBIifPossible(a)
-  
+
   if (a instanceof JSBI) {
     return a.toString()
   } else if (typeof(a) === 'object') {
@@ -1167,8 +1169,8 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let a = context.stackPop()
-        let b = context.stackPop()
+        let a = enforceJSBIifPossible(context.stackPop())
+        let b = enforceJSBIifPossible(context.stackPop())
         context.stackPush(JSBI.add(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on PLUS operator`)
@@ -1184,8 +1186,8 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let a = context.stackPop()
-        let b = context.stackPop()
+        let a = enforceJSBIifPossible(context.stackPop())
+        let b = enforceJSBIifPossible(context.stackPop())
         context.stackPush(JSBI.subtract(b, a))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MINUS operator`)
@@ -1201,8 +1203,8 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let v1 = context.stackPop()
-        let v2 = context.stackPop()
+        let v1 = enforceJSBIifPossible(context.stackPop())
+        let v2 = enforceJSBIifPossible(context.stackPop())
         context.stackPush(JSBI.multiply(v1, v2))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on MUL operator`)
@@ -1218,8 +1220,8 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let down = context.stackPop()
-        let up = context.stackPop()
+        let down = enforceJSBIifPossible(context.stackPop())
+        let up = enforceJSBIifPossible(context.stackPop())
         context.stackPush(JSBI.divide(up, down))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on DIV operator`)
@@ -1235,7 +1237,7 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 0) {
-        context.stackPush(JSBI.unaryMinus(context.stackPop()))
+        context.stackPush(JSBI.unaryMinus(enforceJSBIifPossible(context.stackPop())))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on NEG operator`)
       }
@@ -1250,8 +1252,8 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let a = context.stackPop()
-        let b = context.stackPop()
+        let a = enforceJSBIifPossible(context.stackPop())
+        let b = enforceJSBIifPossible(context.stackPop())
         context.stackPush(JSBI.bitwiseAnd(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on AND operator`)
@@ -1267,8 +1269,8 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let a = context.stackPop()
-        let b = context.stackPop()
+        let a = enforceJSBIifPossible(context.stackPop())
+        let b = enforceJSBIifPossible(context.stackPop())
         context.stackPush(JSBI.bitwiseOr(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on OR operator`)
@@ -1284,8 +1286,8 @@ const ops = {
     unpackParams: [],
     run: (context) => {
       if (context.stack.length > 1) {
-        let a = context.stackPop()
-        let b = context.stackPop()
+        let a = enforceJSBIifPossible(context.stackPop())
+        let b = enforceJSBIifPossible(context.stackPop())
         context.stackPush(JSBI.bitwiseXor(a, b))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on XOR operator`)
@@ -1665,7 +1667,13 @@ const ops = {
       if (currentNamespace) {
         if (context.stack.length > 0) {
           let namespace = currentNamespace + '/'
-          let key = namespace + context.stack[context.stack.length - 1]
+          let key = context.stack[context.stack.length - 1]
+          if (key && typeof(key) !== 'string') {
+            key = safeToString(key)
+          }
+          if (!context.isFederationCall && typeof(key) === 'string' && !key.startsWith('/_/cron.')) {
+            key = namespace + key
+          }
 
           if (context.callingNamespace && !currentNamespace.startsWith(context.callingNamespace)) {
             let owner = await context.store.get(key + '.owner')
