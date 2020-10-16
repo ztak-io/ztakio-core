@@ -235,6 +235,8 @@ function createContext(utils, store, callerAddress, currentTxid) {
     },
 
     appendProgram: (namespace, buf, entrypoints, meta) => {
+      if (ob.executionContexts[namespace]) return // Don't require already required namespaces
+
       ob.executionContexts[namespace] = false
 
       let unpacked = unpack(buf).map(x => {
@@ -307,8 +309,12 @@ async function execute(context, entrypoint, dontCommitReturnState) {
     }
 
     let canCommit = true
+    let invalidContexts = []
     for (let x in context.executionContexts) {
       canCommit &= context.executionContexts[x]
+      if (!context.executionContexts[x]) {
+        invalidContexts.push(x)
+      }
     }
 
     if (canCommit) {
@@ -325,7 +331,7 @@ async function execute(context, entrypoint, dontCommitReturnState) {
       }
     } else {
       await context.store.rollback()
-      throw new Error(`Couldn't VERIFY transaction`)
+      throw new Error(`Couldn't VERIFY transaction on contexts: ${invalidContexts.join(',')}`)
     }
   } catch (e) {
     console.log(e)

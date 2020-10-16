@@ -618,6 +618,7 @@ const ops = {
     run: (message, context) => {
       if (context.stack.length > 0) {
         const top = context.stackPop()
+
         if (Array.isArray(top)) {
           if (top.filter(x => x === 1 || x === JSBI.BigInt(1)).length === 0) {
             throw new Error(`VERIFY error: ${message}`) //`invalid stack on VERIFY op (top array doesnt contains a 1)`)
@@ -1356,6 +1357,7 @@ const ops = {
       if (context.stack.length > 1) {
         let a = context.stackPop()
         let b = context.stackPop()
+        console.log('--> LTE Comparing', safeToString(b), '<=', safeToString(a), safeLessThanOrEqual(b, a))
         context.stackPush(safeLessThanOrEqual(b, a))
       } else {
         throw new Error(`invalid stack (size ${context.stack.length}) on LTE operator`)

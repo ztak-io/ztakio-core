@@ -196,7 +196,6 @@ const reservedIdentifiers = {
 let firstFuncdefParsed = false
 let currentFuncContext = null
 let currentLine = 0
-let hasBeenRequired = {}
 
 const pushIdent = (type, value) => {
   if (type === 'number') {
@@ -257,10 +256,6 @@ const funcCall = (gen, callMember, debug) => {
   }
 
   if (path) {
-    if (!hasBeenRequired[path]) {
-      gen(`REQUIRE ${path}`)
-      hasBeenRequired[path] = true
-    }
     gen(`ECALL ${path}:${identifier}`)
   } else {
     if (identifier === 'del') {
@@ -752,7 +747,6 @@ if (require.main === module) {
 } else {
   module.exports = (code) => {
     firstFuncdefParsed = false
-    hasBeenRequired = {}
     let asm = ''
     const gen = (line) => {
       asm += line + '\n'
