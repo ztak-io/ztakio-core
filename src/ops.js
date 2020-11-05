@@ -624,11 +624,15 @@ const ops = {
             throw new Error(`VERIFY error: ${message}`) //`invalid stack on VERIFY op (top array doesnt contains a 1)`)
           } else {
             context.executionContexts[context.currentLineContext] = true
+            context.successfulVerificationEvents.push({context: context.currentLineContext, message})
           }
         } else if (!(top === 1 || JSBI.equals(top, JSBI.BigInt(1)))) {
           throw new Error(`VERIFY error: ${message}`)
         } else if (context.currentLineContext) {
           context.executionContexts[context.currentLineContext] = true
+          context.successfulVerificationEvents.push({context: context.currentLineContext, message})
+        } else {
+          context.successfulVerificationEvents.push({context: context.currentLineContext, message})
         }
       } else {
         throw new Error(`empty stack on VERIFY op`)

@@ -177,6 +177,7 @@ function createContext(utils, store, callerAddress, currentTxid) {
     entrypoints: {},
     registers: {},
     stack: [],
+    successfulVerificationEvents: [],
     executing: false,
     callingNamespace: '',
     pendingBranchEnum: null,
@@ -284,7 +285,7 @@ function createContext(utils, store, callerAddress, currentTxid) {
   return ob
 }
 
-
+const verificationCallbacks = []
 async function execute(context, entrypoint, dontCommitReturnState) {
   await context.store.start()
   try {
@@ -327,6 +328,11 @@ async function execute(context, entrypoint, dontCommitReturnState) {
         }
       } else {
         await context.store.commit()
+        if (context.successfulVerificationEvents.length > 0) {
+          context.successfulVerificationEvents.forEach(x => {
+            verificationCallbacks.forEach(cb => cb({...x, caller: context.callerAddress, txid: context.currentTxid}))
+          })
+        }
         return true
       }
     } else {
@@ -340,6 +346,10 @@ async function execute(context, entrypoint, dontCommitReturnState) {
   }
 }
 
+function registerVerificationCallback(cb) {
+  verificationCallbacks.push(cb)
+}
+
 module.exports = {
-  compile, unpack, createContext, execute, ops, safeToString
+  compile, unpack, createContext, execute, ops, safeToString, registerVerificationCallback
 }
