@@ -209,7 +209,12 @@ const ops = {
 
             if (parentMeta) {
               if (!(parentMeta.Address === context.callerAddress)) {
-                throw new Error('parent namespace not owned by the deployer address, not executing')
+                const alreadyDeployed = await context.store.get(namespace + '.meta')
+                if (alreadyDeployed && alreadyDeployed.Address === context.callerAddress) {
+                  // Do nothing, execution can continue
+                } else {
+                  throw new Error('parent namespace not owned by the deployer address, not executing')
+                }
               }
             } else {
               throw new Error('parent namespace doesn\'t exists, not deploying')
