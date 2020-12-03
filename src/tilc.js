@@ -3,6 +3,7 @@ const Grammars = require('ebnf').Grammars
 //const grammar = fs.readFileSync(require.resolve('./til_lang_spec.ebnf'), 'utf8')
 const grammar = require('./til_lang_spec.ebnf')
 const util = require('util')
+const { ops } = require('./ops')
 
 function parse(code) {
   const parser = new Grammars.W3C.Parser(grammar)
@@ -284,7 +285,11 @@ const funcCall = (gen, callMember, debug) => {
     } else if (identifier === 'logp') {
       gen(`LOGP`)
     } else {
-      gen(`CALL ${identifier}`)
+      if (identifier === identifier.toUpperCase() && identifier in ops) {
+        gen(`${identifier}`)
+      } else {
+        gen(`CALL ${identifier}`)
+      }
     }
   }
 }
