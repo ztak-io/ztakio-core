@@ -820,6 +820,28 @@ const ops = {
     }
   },
 
+  ECALLP: {
+    comment: 'Makes an ECALL over a dynamically REQUIREd contract poped from the stack',
+    code: 0x1F,
+    validate: (elems) => forceArgs(elems, []),
+    relocateStrategy: 'move',
+    build: (context) => Buffer.concat([
+      UInt8Buf(ops.ECALLP.code)
+    ]),
+    unpackParams: [],
+    run: async (context) => {
+      if (context.stack.length >= 2) {
+        const label = context.stackPop()
+        const path = context.stackPop()
+
+        await ops.REQUIRE.run(path, context)
+        ops.ECALL.run(path + ':' + label, context)
+      } else {
+        throw new Error(`invalid stack size on ECALLP operator`)
+      }
+    }
+  },
+
   POP: {
     comment: 'Pop value from the stack to a given register on the context',
     code: 0x20,

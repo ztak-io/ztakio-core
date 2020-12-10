@@ -215,6 +215,7 @@ function createContext(utils, store, callerAddress, currentTxid) {
       if (name in ob.entrypoints) {
         return ob.entrypoints[name]
       } else {
+        console.log(`While looking for "${name}" in`, ob.entrypoints)
         throw new Error(`label ${name} not found`)
       }
     },
@@ -236,7 +237,7 @@ function createContext(utils, store, callerAddress, currentTxid) {
     },
 
     appendProgram: (namespace, buf, entrypoints, meta) => {
-      if (ob.executionContexts[namespace]) return // Don't require already required namespaces
+      if (namespace in ob.executionContexts) return // Don't require already required namespaces
 
       ob.executionContexts[namespace] = false
 
