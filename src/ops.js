@@ -286,13 +286,28 @@ const ops = {
         let spls = context.namespace.split('/')
 
         if (spls.length > 1) {
-          let parentNamespace = spls.slice(0, -1).join('/')
+          spls = spls.slice(0, -1)
+          let parentNamespace = spls.join('/')
           if (parentNamespace.length > 0) {
             let parentMeta = await context.store.get(parentNamespace + '.meta')
 
             if (parentMeta) {
               if (!(parentMeta.Address === context.callerAddress)) {
                 throw new Error('parent namespace not owned by the deployer address, not deploying')
+              }
+
+              let depth = JSBI.BigInt(1)
+              while (spls.length > 1) {
+                spls = spls.slice(0, -1)
+                let ancestorNamespace = spls.join('/')
+                let ancestorPermissions = await context.store.get(ancestorNamespace + '/__permissions')
+                console.log('Getting ancestor permissions', ancestorNamespace, ancestorPermissions)
+
+                if (ancestorPermissions && 'maxAllowedDepth' in ancestorPermissions &&
+                  safeGreaterThan(depth, ancestorPermissions.maxAllowedDepth)) {
+                  throw new Error('ancestor namespace forbids deploying at this depth')
+                }
+                depth++
               }
             } else {
               throw new Error('parent namespace doesn\'t exists, not deploying')
@@ -307,8 +322,21 @@ const ops = {
           Object.entries(entrypoints).filter(([k,v]) => !k.startsWith('/'))
         )
 
+      const abiWhitelist = await context.store.get(context.namespace + '.abiwhitelist')
+      const entries = cleanEntrypoints(context.entrypoints)
+
+      if (abiWhitelist && safeEqual(abiWhitelist, JSBI.BigInt(1))) {
+        const plainEntries = Object.keys(entries).sort().join(',')
+        const abiHash = crypto.sha256(plainEntries).toString('hex')
+        const whitelistKey = context.namespace + '.abiwhitelist/' + abiHash
+        const hashInWhitelist = await context.store.get(whitelistKey)
+        if (!hashInWhitelist || !safeEqual(hashInWhitelist, JSBI.BigInt(1))) {
+          throw new Error('contract type not allowed by whitelist')
+        }
+      }
+
       await context.store.put(context.namespace, context.code)
-      await context.store.put(context.namespace + '.entrypoints', cleanEntrypoints(context.entrypoints))
+      await context.store.put(context.namespace + '.entrypoints', entries)
       await context.store.put(context.namespace + '.meta', context.meta)
 
       for (let loc in context.entrypoints) {

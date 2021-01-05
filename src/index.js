@@ -160,6 +160,7 @@ function decode(envelope) {
 
   let calls = []
   let params = []
+  let entrypoints = []
   for (let i=0; i < lines.length; i++) {
     let item = lines[i]
     if (item.opName.startsWith('PUSH')) {
@@ -167,10 +168,21 @@ function decode(envelope) {
     } else if (item.opName === 'ECALL') {
       calls.push({ [item.params[0]]: params })
       params = []
+    } else if (item.opName === 'ENTRY') {
+      entrypoints.push(item.params[0])
     }
   }
 
-  return {from: msg.from, calls}
+  let ob = {from: msg.from}
+  if (calls.length > 0) {
+    ob.calls = calls
+  }
+
+  if (entrypoints.length > 0) {
+    ob.entrypoints = entrypoints
+  }
+
+  return ob
 }
 
 if ((typeof(process) !== 'undefined') && process.mainModule && process.mainModule.path) {
