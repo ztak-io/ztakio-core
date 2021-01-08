@@ -307,7 +307,7 @@ const ops = {
                   safeGreaterThan(depth, ancestorPermissions.maxAllowedDepth)) {
                   throw new Error('ancestor namespace forbids deploying at this depth')
                 }
-                depth++
+                depth = JSBI.add(depth, 1)
               }
             } else {
               throw new Error('parent namespace doesn\'t exists, not deploying')
