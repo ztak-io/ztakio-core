@@ -301,13 +301,13 @@ const ops = {
                 spls = spls.slice(0, -1)
                 let ancestorNamespace = spls.join('/')
                 let ancestorPermissions = await context.store.get(ancestorNamespace + '/__permissions')
-                console.log('Getting ancestor permissions', ancestorNamespace, ancestorPermissions)
+                console.log('Getting ancestor permissions', ancestorNamespace, '/', ancestorPermissions)
 
                 if (ancestorPermissions && 'maxAllowedDepth' in ancestorPermissions &&
                   safeGreaterThan(depth, ancestorPermissions.maxAllowedDepth)) {
                   throw new Error('ancestor namespace forbids deploying at this depth')
                 }
-                depth = JSBI.add(depth, 1)
+                depth = JSBI.add(depth, JSBI.BigInt(1))
               }
             } else {
               throw new Error('parent namespace doesn\'t exists, not deploying')
