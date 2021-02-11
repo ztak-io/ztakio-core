@@ -26,6 +26,20 @@ function forceArgs(list, types) {
   return results
 }
 
+function areSiblings(a, b) {
+  let aSpl = a.split('/')
+  let bSpl = b.split('/')
+
+  if (aSpl.length !== bSpl.length) {
+    return false
+  }
+
+  aSpl.pop()
+  bSpl.pop()
+
+  return aSpl.join('/') === bSpl.join('/')
+}
+
 function enforceJSBIifPossible(a) {
   if (!(a instanceof JSBI) && a !== null && typeof(a) === 'object' && 'sign' in a) {
     let na = JSBI.from(a)
@@ -1649,7 +1663,9 @@ const ops = {
             let owner = await context.store.get(key + '.owner')
 
             if (owner && owner !== context.callingNamespace) {
-              throw new Error(`key owned by ${owner}, cannot PUT`)
+              if (!areSiblings(currentNamespace, context.callingNamespace)) {
+                throw new Error(`key owned by ${owner}, cannot PUT`)
+              }
             }
           } else if (context.isFederationCall) {
             let prevValue = await context.store.get(key)
